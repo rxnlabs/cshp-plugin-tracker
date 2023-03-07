@@ -14,6 +14,8 @@ The main purpose is for tracking the currently **installed** version of WordPres
 
 By tracking the installed versions of a WP core, third-party plugins, and third-party themes, these items can stop being tracked in the main Git repository for the website.
 
+The `composer.json` file will be tracked in the main Git repo for the website along with a `README.md` that will list out the WordPress version, plugins, and themes _installed_ on the site.
+
 This `composer.json` file will look like:
 
 ```json
@@ -63,6 +65,24 @@ This `composer.json` file will look like:
     }
   }
 }
+```
+
+The `README.md` file will look like:
+```markdown
+## WordPress Version
+- 6.1.1
+
+## Themes Installed
+- blocksy-child
+- blocksy
+
+## Plugins Installed
+- backupbuddy (version 8.7.4.0)
+- classic-editor (version 1.6.2)
+- cshp-support (version 1.0.0)
+- debug-bar (version 1.1.3)
+- elementor-pro (version 3.5.2)
+
 ```
 
 ### Download the Premium themes and Premium plugins
