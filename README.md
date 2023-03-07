@@ -83,6 +83,19 @@ The `README.md` file will look like:
 - debug-bar (version 1.1.3)
 - elementor-pro (version 3.5.2)
 
+## WP-CLI Command to Install Plugins
+`wp plugin install classic-editor --version="1.6.2" & wp plugin install debug-bar --version="1.1.3"`
+
+## WP-CLI Command to Install Themes
+`wp plugin install blocksy`
+
+## Command Line to Zip Themes
+Use command to zip premium themes if the .zip file cannot be created or downloaded
+`zip -r premium-themes.zip blocksy-child`
+
+## Command Line to Zip Plugins
+Use command to zip premium plugins if the .zip file cannot be created or downloaded
+`zip -r premium-plugins.zip backupbuddy cshp-support elementor-pro`
 ```
 
 ### Download the Premium themes and Premium plugins
