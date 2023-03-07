@@ -1,0 +1,42 @@
+# Log files
+*.log
+*.log-*
+error_log
+
+# Dotenv
+.env
+.env.*
+!.env.example
+
+# WP-CLI
+wp-cli.local.yml
+
+# Project files
+*.sublime-*
+.idea/
+.ideas/
+sftp-config.json
+*.un~
+.*.swp
+
+# Packages #
+############
+*.7z
+*.dmg
+*.gz
+*.bz2
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+*.tgz
+
+# Misc
+.DS_Store
+**/.DS_Store
+__MACOSX/
+**/__MACOSX/
+ehthumbs.db
+Thumbs.db
+*.sql
