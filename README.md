@@ -1,6 +1,6 @@
 # Cornershop Plugin Tracker
 ## Installation
-Install this plugin by downloading the .zip file and uploading it to the WordPress admin.
+Install this plugin by downloading the .zip file or a release tag from Bitbucket and uploading it to the WordPress admin.
 
 ## Purpose
 This plugin has two purposes and will be installed on all client websites.

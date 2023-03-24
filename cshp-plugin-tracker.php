@@ -31,7 +31,7 @@ require_once 'inc/license.php';
 
 // load the WP CLI commands
 if ( is_wp_cli_action() ) {
-    require_once 'inc/wp-cli.php';
+	require_once 'inc/wp-cli.php';
 }
 
 /**
@@ -98,7 +98,11 @@ add_action( 'upgrader_process_complete', __NAMESPACE__ . '\flush_composer_post_u
  * @return void
  */
 function flush_composer_post_activate_plugin( $plugin, $network_wide ) {
-	should_real_time_update() && create_plugin_tracker_file();
+	if ( is_wp_cli_action() ) {
+		update_plugin_tracker_file_post_bulk_update();
+	} else {
+		should_real_time_update() && create_plugin_tracker_file();
+	}
 }
 add_action( 'activated_plugin', __NAMESPACE__ . '\flush_composer_post_activate_plugin', 10, 2 );
 
@@ -111,7 +115,11 @@ add_action( 'activated_plugin', __NAMESPACE__ . '\flush_composer_post_activate_p
  * @return void
  */
 function flush_composer_post_theme_switch( $old_theme_name, $old_theme ) {
-	should_real_time_update() && create_plugin_tracker_file();
+	if ( is_wp_cli_action() ) {
+		update_plugin_tracker_file_post_bulk_update();
+	} else {
+		should_real_time_update() && create_plugin_tracker_file();
+	}
 }
 add_action( 'after_switch_theme', __NAMESPACE__ . '\flush_composer_post_theme_switch', 10, 2 );
 
@@ -126,7 +134,9 @@ add_action( 'after_switch_theme', __NAMESPACE__ . '\flush_composer_post_theme_sw
 function flush_composer_plugin_uninstall( $plugin_relative_file, $uninstallable_plugins ) {
 	$file = plugin_basename( $plugin_relative_file );
 
-	if ( should_real_time_update() ) {
+	if ( is_wp_cli_action() ) {
+		update_plugin_tracker_file_post_bulk_update();
+	} elseif ( should_real_time_update() ) {
 		// run this when the plugin is successfully uninstalled
 		$action_name = sprintf( 'uninstall_%s', $file );
 		add_action(
@@ -147,7 +157,11 @@ add_action( 'pre_uninstall_plugin', __NAMESPACE__ . '\flush_composer_plugin_unin
  * @return void
  */
 function flush_composer_theme_delete( $stylesheet ) {
-	should_real_time_update() && create_plugin_tracker_file();
+	if ( is_wp_cli_action() ) {
+		update_plugin_tracker_file_post_bulk_update();
+	} else {
+		should_real_time_update() && create_plugin_tracker_file();
+	}
 }
 add_action( 'delete_theme', __NAMESPACE__ . '\flush_composer_plugin_uninstall', 10, 1 );
 
@@ -791,10 +805,10 @@ function is_plugin_available( $plugin_slug, $version = '' ) {
  * @return bool True if the theme is available, false if not available.
  */
 function is_theme_available( $theme_slug, $version = '' ) {
-    // if external requests are blocked to wordpress.org, assume that all themes are premium themes
-    if ( is_wordpress_org_external_request_blocked() ) {
-        return false;
-    }
+	// if external requests are blocked to wordpress.org, assume that all themes are premium themes
+	if ( is_wordpress_org_external_request_blocked() ) {
+		return false;
+	}
 
 	$url     = 'https://api.wordpress.org/themes/info/1.1/';
 	$version = trim( $version );
@@ -891,14 +905,14 @@ function is_update_disabled( $plugin_data ) {
  * @return bool
  */
 function is_wordpress_org_external_request_blocked() {
-    $is_wordpress_org_blocked = false;
+	$is_wordpress_org_blocked = false;
 
-    if ( defined( 'WP_HTTP_BLOCK_EXTERNAL' ) && true === WP_HTTP_BLOCK_EXTERNAL ) {
-	    $check_host = new \WP_Http();
-        $is_wordpress_org_blocked = $check_host->block_request( 'https://api.wordpress.org' );
-    }
+	if ( defined( 'WP_HTTP_BLOCK_EXTERNAL' ) && true === WP_HTTP_BLOCK_EXTERNAL ) {
+		$check_host               = new \WP_Http();
+		$is_wordpress_org_blocked = $check_host->block_request( 'https://api.wordpress.org' );
+	}
 
-    return $is_wordpress_org_blocked;
+	return $is_wordpress_org_blocked;
 }
 
 /**
@@ -918,7 +932,7 @@ function create_plugin_tracker_file() {
 
 	$folder_path = create_plugin_uploads_folder();
 	$file_path   = sprintf( '%s/composer.json', $folder_path );
-    $error = __( 'Tracker File could not be created due to unknown error. Maybe disk space or permissions error when writing to the file. WordPress Filesystem may be in FTP mode and the FTP credentials have not been updated. Please fix before trying again.', get_textdomain() );
+	$error       = __( 'Tracker File could not be created due to unknown error. Maybe disk space or permissions error when writing to the file. WordPress Filesystem may be in FTP mode and the FTP credentials have not been updated. Please fix before trying again.', get_textdomain() );
 
 	if ( ! is_wp_error( $folder_path ) && ! empty( $folder_path ) ) {
 		$composer_json = wp_json_encode( generate_composer_array(), JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT );
@@ -943,7 +957,7 @@ function create_plugin_tracker_file() {
 		log_request( 'tracker_file_error', $error );
 	}//end if
 
-    return $error;
+	return $error;
 }
 
 /**
@@ -1092,15 +1106,15 @@ function zip_missing_plugins() {
 	$zip_include_plugins = [];
 
 	if ( class_exists( '\ZipArchive' ) ) {
-        // if we are using WP CLI, allow the zip of plugins to be generated multiple times
-        if ( ! is_wp_cli_action() ) {
-	        if ( does_zip_exists( get_missing_plugin_zip_file() ) && ! is_plugin_zip_old() ) {
-		        log_request( 'plugin_zip_download' );
-		        return get_missing_plugin_zip_file();
-	        } else {
-		        log_request( 'plugin_zip_download', __( 'Attempt download but plugin zip does not exists or has not been generated lately. Generate zip.', get_textdomain() ) );
-	        }
-        }
+		// if we are using WP CLI, allow the zip of plugins to be generated multiple times
+		if ( ! is_wp_cli_action() ) {
+			if ( does_zip_exists( get_missing_plugin_zip_file() ) && ! is_plugin_zip_old() ) {
+				log_request( 'plugin_zip_download' );
+				return get_missing_plugin_zip_file();
+			} else {
+				log_request( 'plugin_zip_download', __( 'Attempt download but plugin zip does not exists or has not been generated lately. Generate zip.', get_textdomain() ) );
+			}
+		}
 
 		if ( ! is_wp_error( create_plugin_uploads_folder() ) && ! empty( create_plugin_uploads_folder() ) ) {
 			$zip_path = sprintf( '%s/plugins-%s.zip', create_plugin_uploads_folder(), wp_generate_uuid4() );
@@ -1160,15 +1174,15 @@ function zip_missing_themes() {
 	if ( class_exists( '\ZipArchive' ) ) {
 
 		// if we are using WP CLI, allow the zip of themes to be generated multiple times
-        if ( ! is_wp_cli_action() ) {
-	        if ( does_zip_exists( get_missing_theme_zip_file() ) && ! is_theme_zip_old() ) {
-		        log_request( 'theme_zip_download' );
-		        return get_missing_theme_zip_file();
-	        } else {
-		        log_request( 'themes_zip_download', __( 'Attempt download but theme zip does not exists or has not been generated. Generate zip.', get_textdomain() ) );
+		if ( ! is_wp_cli_action() ) {
+			if ( does_zip_exists( get_missing_theme_zip_file() ) && ! is_theme_zip_old() ) {
+				log_request( 'theme_zip_download' );
+				return get_missing_theme_zip_file();
+			} else {
+				log_request( 'themes_zip_download', __( 'Attempt download but theme zip does not exists or has not been generated. Generate zip.', get_textdomain() ) );
 
-	        }
-        }
+			}
+		}
 
 		if ( ! is_wp_error( create_plugin_uploads_folder() ) && ! empty( create_plugin_uploads_folder() ) ) {
 			$zip_path = sprintf( '%s/themes-%s.zip', create_plugin_uploads_folder(), wp_generate_uuid4() );
@@ -2135,10 +2149,10 @@ function admin_page_wp_documentation() {
  */
 function admin_notice() {
 	if ( ! empty( get_current_screen() ) &&
-         'settings_page_cshp-plugin-tracker' === get_current_screen()->id &&
-         is_wordpress_org_external_request_blocked() &&
-         current_user_can( 'manage_options' ) ) {
-        echo sprintf( '<div class="notice notice-error is-dismissible cshp-pt-notice"><p>%s</p></div>', esc_html__( 'External requests to wordpress.org are being blocked. When generating the plugin tracker file, all themes and plugins will be considered premium. Unblock requests to wordpress.org to fix this. Update the PHP constant "WP_ACCESSIBLE_HOSTS" to include exception for *.wordpress.org', get_textdomain() ) );
+		 'settings_page_cshp-plugin-tracker' === get_current_screen()->id &&
+		 is_wordpress_org_external_request_blocked() &&
+		 current_user_can( 'manage_options' ) ) {
+		echo sprintf( '<div class="notice notice-error is-dismissible cshp-pt-notice"><p>%s</p></div>', esc_html__( 'External requests to wordpress.org are being blocked. When generating the plugin tracker file, all themes and plugins will be considered premium. Unblock requests to wordpress.org to fix this. Update the PHP constant "WP_ACCESSIBLE_HOSTS" to include exception for *.wordpress.org', get_textdomain() ) );
 	}
 }
 add_action( 'admin_notices', __NAMESPACE__ . '\admin_notice', 10 );
@@ -2587,8 +2601,8 @@ function premium_plugins_list() {
 			'backupbuddy',
 			'blocksy-companion-pro',
 			'bulk-actions-pro-for-gravity-forms',
-            'cshp-kinsta',
-            'cshp-plugin-updater',
+			'cshp-kinsta',
+			'cshp-plugin-updater',
 			'cshp-support',
 			'donation-for-woocommerce',
 			'elementor-pro',
@@ -2648,7 +2662,7 @@ function premium_plugins_list() {
 			'wpai-acf-add-on',
 			'wp-all-export-pro',
 			'wp-all-import-pro',
-            'wpbot-pro',
+			'wpbot-pro',
 			'wp-rocket',
 		],
 		[ get_this_plugin_folder() ]
@@ -2670,9 +2684,9 @@ function premium_themes_list() {
 		'impacto-patronus',
 		'impacto-patronus-child',
 		'jupiter',
-        'jupiter-child',
+		'jupiter-child',
 		'jupiterx',
-        'jupiterx-child',
+		'jupiterx-child',
 		'lekker',
 		'lekker-child',
 		'minerva',
