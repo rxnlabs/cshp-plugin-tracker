@@ -2,12 +2,8 @@
 ## Installation
 Install this plugin by downloading the .zip file and uploading it to the WordPress admin.
 
-Eventually this plugin will be installed using Satispress and it will have it's own update channel where updates to this plugin can be released to client sites.
-
-This plugin will be installed on all client websites.
-
 ## Purpose
-This plugin has two purposes.
+This plugin has two purposes and will be installed on all client websites.
 
 ### Track other plugins
 The main purpose is for tracking the currently **installed** version of WordPress core, the themes, and the plugins on a WordPress website. The assets will be tracked in a `composer.json` file that is saved in the Uploads directory. This `composer.json` file should be tracked in the main Git repository for the website.
@@ -112,8 +108,8 @@ The **main** purpose of this capability is for spinning up a staging version of 
 3. Install wordpress.org plugins using WP CLI or composer
 4. Install wordpress.org themes using WP CLI or composer 
 5. Download the premium plugins .zip file using the WP REST API URL using `wget` or `curl`.
-6. Uzip the file plugins .zip and place the plugins into the `plugins/` folder
+6. Unzip the file plugins .zip and place the plugins into the `plugins/` folder
 7. Download the premium themes .zip file using the WP REST API URL (the premium themes should usually be the parent theme if we are using a child theme) using `wget` or `curl`.
-8. Uzip the themes .zip file and place themes into the `themes/` folder.
+8. Unzip the themes .zip file and place themes into the `themes/` folder.
 
 Most of these steps can be automated but we will need to modify the `setupsite` command to support this first.

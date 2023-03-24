@@ -1,0 +1,16 @@
+# Don't bother showing diffs for minified files or composer vendor files
+composer-vendor/* -diff
+composer-vendor/** -diff
+composer-vendor/** binary
+non-composer-vendor/* -diff
+non-composer-vendor/** -diff
+non-composer-vendor/** binary
+assets/vendor/* -diff
+assets/vendor/** -diff
+assets/vendor/** binary
+*.map -diff
+*.map binary
+*.min.* -diff
+*.min.* binary
+*.sql -diff
+*.sql binary
