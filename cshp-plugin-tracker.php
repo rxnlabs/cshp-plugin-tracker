@@ -40,11 +40,13 @@ if ( is_wp_cli_action() ) {
  * @return void
  */
 function load_non_composer_libraries() {
-	$plugin_path = plugin_dir_path( __FILE__ );
+	$vendor_path = sprintf( '%s/non-composer-vendor', plugin_dir_path( __FILE__ ) );
 	// explicitly include the Action Scheduler plugin instead of installing the library with Composer
 	if ( ! function_exists( '\as_schedule_cron_action' ) ) {
-		require_once sprintf( '%s/non-composer-vendor/action-scheduler/action-scheduler.php', $plugin_path );
+		require_once sprintf( '%s/action-scheduler/action-scheduler.php', $vendor_path );
 	}
+
+	require_once sprintf( '%s/markdown-table.php', $vendor_path );
 }
 
 /**
@@ -605,36 +607,23 @@ function generate_composer_installed_plugins() {
  * @return array Composer'ized array with theme scope and name as the key and version as the value.
  */
 function generate_composer_installed_themes() {
-	$theme       = wp_get_theme();
+	$themes      = wp_get_themes();
 	$format_data = [];
 
-	if ( ! empty( $theme ) ) {
-		$parent_theme      = $theme->parent();
-		$theme_path_info   = explode( DIRECTORY_SEPARATOR, $theme->get_stylesheet_directory() );
-		$theme_folder_name = end( $theme_path_info );
-		$repo              = 'wpackagist-theme';
+	if ( ! empty( $themes ) ) {
+		foreach ( $themes as $theme ) {
+			$theme_path_info   = explode( DIRECTORY_SEPARATOR, $theme->get_stylesheet_directory() );
+			$theme_folder_name = end( $theme_path_info );
+			$repo              = 'wpackagist-theme';
 
-		if ( in_array( $theme_folder_name, premium_themes_list(), true ) ||
-			 ! is_theme_available( $theme_folder_name, $theme->get( 'Version' ) ) ) {
-			$repo = 'premium-theme';
-		}
-
-		$key                 = sprintf( '%s/%s', $repo, $theme_folder_name );
-		$format_data[ $key ] = ! empty( $theme->get( 'Version' ) ) ? $theme->get( 'Version' ) : '*';
-
-		if ( ! empty( $parent_theme ) && $parent_theme->exists() ) {
-			$parent_theme_path_info   = explode( DIRECTORY_SEPARATOR, $parent_theme->get_template_directory() );
-			$parent_theme_folder_name = end( $parent_theme_path_info );
-
-			$repo = 'wpackagist-theme';
 			if ( in_array( $theme_folder_name, premium_themes_list(), true ) ||
-				 ! is_theme_available( $parent_theme_folder_name, $parent_theme->get( 'Version' ) ) ) {
+				 ! is_theme_available( $theme_folder_name, $theme->get( 'Version' ) ) ) {
 				$repo = 'premium-theme';
 			}
 
-			$key                 = sprintf( '%s/%s', $repo, $parent_theme_folder_name );
-			$format_data[ $key ] = $parent_theme->get( 'Version' );
-		}
+			$key                 = sprintf( '%s/%s', $repo, $theme_folder_name );
+			$format_data[ $key ] = ! empty( $theme->get( 'Version' ) ) ? $theme->get( 'Version' ) : '*';
+		}//end foreach
 	}//end if
 
 	return $format_data;
@@ -2245,31 +2234,79 @@ function generate_wordpress_markdown() {
  * @return string Markdown for the installed themes.
  */
 function generate_themes_markdown( $composer_json_required ) {
-	$public  = [];
-	$premium = [];
+	$public           = [];
+	$premium          = [];
+	$public_markdown  = __( 'No public themes installed', get_textdomain() );
+	$premium_markdown = __( 'No premium themes installed', get_textdomain() );
+	$themes_data      = wp_get_themes();
+	$columns          = [ 'Name', 'Folder', 'Version', 'Theme URL/Author' ];
+	$public_table     = [];
+	$premium_table    = [];
 
 	foreach ( $composer_json_required as $theme_name => $version ) {
 		$clean_name = str_replace( 'premium-theme/', '', str_replace( 'wpackagist-theme/', '', $theme_name ) );
 
 		if ( false !== strpos( $theme_name, 'wpackagist' ) ) {
-			$public[] = sprintf( '- %s (version %s)', $clean_name, $version );
+			$public[] = $clean_name;
 		}
 
 		if ( false !== strpos( $theme_name, 'premium-theme' ) ) {
-			$premium[] = sprintf( '- %s (version %s)', $clean_name, $version );
+			$premium[] = $clean_name;
 		}
 	}
 
-	if ( ! empty( $public ) ) {
-		$public = implode( PHP_EOL, $public );
-	} else {
-		$public = __( 'No public themes installed.', get_textdomain() );
+	foreach ( $themes_data as $theme ) {
+		$version           = ! empty( $theme->get( 'Version' ) ) ? $theme->get( 'Version' ) : '';
+		$theme_path_info   = explode( DIRECTORY_SEPARATOR, $theme->get_stylesheet_directory() );
+		$theme_folder_name = end( $theme_path_info );
+
+		if ( in_array( $theme_folder_name, $public, true ) ) {
+			$public_table[ $theme_folder_name ] = [
+				$theme->get( 'Name' ),
+				$theme_folder_name,
+				$version,
+				sprintf( '[Link](https://wordpress.org/themes/%s)', esc_html( $theme_folder_name ) ),
+			];
+		} elseif ( in_array( $theme_folder_name, $premium, true ) ) {
+			$url = '';
+
+			if ( ! empty( $theme->get( 'ThemeURI' ) ) ) {
+				$url = sprintf( '[Link](%s)', esc_url( $theme->get( 'ThemeURI' ) ) );
+			} elseif ( ! empty( $theme->get( 'AuthorURI' ) ) ) {
+				$url = sprintf( '[Link](%s)', esc_url( $theme->get( 'AuthorURI' ) ) );
+			} elseif ( ! empty( $theme->get( 'Author' ) ) ) {
+				$url = esc_html( $theme->get( 'Author' ) );
+			} else {
+				$url = __( 'No author data found.', get_textdomain() );
+			}
+
+			$premium_table[ $theme_folder_name ] = [
+				$theme->get( 'Name' ),
+				$theme_folder_name,
+				$version,
+				$url,
+			];
+		}//end if
+	}//end foreach
+
+	if ( ! empty( $public_table ) ) {
+		ksort( $public_table );
+		$table = new \TextTable( $columns, [] );
+		// increase the max length of the data to account for long urls for theme homepages, otherwise the library
+		// will cutoff of the url
+		$table->maxlen = 300;
+		$table->addData( $public_table );
+		$public_markdown = $table->render();
 	}
 
-	if ( ! empty( $premium ) ) {
-		$premium = implode( PHP_EOL, $premium );
-	} else {
-		$premium = __( 'No premium themes installed.', get_textdomain() );
+	if ( ! empty( $premium_table ) ) {
+		ksort( $premium_table );
+		$table = new \TextTable( $columns, [] );
+		// increase the max length of the data to account for long urls for theme homepages, otherwise the library
+		// will cutoff of the url
+		$table->maxlen = 300;
+		$table->addData( $premium_table );
+		$premium_markdown = $table->render();
 	}
 
 	return sprintf(
@@ -2279,8 +2316,8 @@ function generate_themes_markdown( $composer_json_required ) {
         ### Premium Themes%1$s
         %3$s',
 		PHP_EOL,
-		$public,
-		$premium
+		$public_markdown,
+		$premium_markdown
 	);
 }
 
@@ -2369,19 +2406,78 @@ function generate_themes_zip_command( $composer_json_required ) {
  * @return string Markdown for the installed plugins.
  */
 function generate_plugins_markdown( $composer_json_required ) {
-	$public  = [];
-	$premium = [];
+	$public           = [];
+	$premium          = [];
+	$public_markdown  = __( 'No public plugins installed', get_textdomain() );
+	$premium_markdown = __( 'No premium plugins installed', get_textdomain() );
+	$plugins_data     = get_plugins();
+	$columns          = [ 'Name', 'Folder', 'Version', 'Plugin URL/Author' ];
+	$public_table     = [];
+	$premium_table    = [];
 
 	foreach ( $composer_json_required as $plugin_name => $version ) {
-		$clean_name = str_replace( 'premium-plugin/', '', str_replace( 'wpackagist-plugin/', '', $plugin_name ) );
+		$clean_plugin_folder_name = str_replace( 'premium-plugin/', '', str_replace( 'wpackagist-plugin/', '', $plugin_name ) );
 
 		if ( false !== strpos( $plugin_name, 'wpackagist' ) ) {
-			$public[] = sprintf( '- %s (version %s)', $clean_name, $version );
+			$public[] = $clean_plugin_folder_name;
 		}
 
 		if ( false !== strpos( $plugin_name, 'premium-plugin' ) ) {
-			$premium[] = sprintf( '- %s (version %s)', $clean_name, $version );
+			$premium[] = $clean_plugin_folder_name;
 		}
+	}
+
+	foreach ( $plugins_data as $plugin_file => $data ) {
+		$version       = isset( $data['Version'] ) && ! empty( $data['Version'] ) ? $data['Version'] : '';
+		$plugin_folder = dirname( $plugin_file );
+
+		if ( in_array( $plugin_folder, $public, true ) ) {
+			$public_table[ $plugin_folder ] = [
+				$data['Name'],
+				$plugin_folder,
+				$version,
+				sprintf( '[Link](https://wordpress.org/plugins/%s)', esc_html( $plugin_folder ) ),
+			];
+		} elseif ( in_array( $plugin_folder, $premium, true ) ) {
+			$url = '';
+
+			if ( isset( $data['PluginURI'] ) && ! empty( $data['PluginURI'] ) ) {
+				$url = sprintf( '[Link](%s)', esc_url( $data['PluginURI'] ) );
+			} elseif ( isset( $data['AuthorURI'] ) && ! empty( $data['AuthorURI'] ) ) {
+				$url = sprintf( '[Link](%s)', esc_url( $data['AuthorURI'] ) );
+			} elseif ( isset( $data['Author'] ) && ! empty( $data['Author'] ) ) {
+				$url = esc_html( $data['Author'] );
+			} else {
+				$url = __( 'No author data found.', get_textdomain() );
+			}
+
+			$premium_table[ $plugin_folder ] = [
+				$data['Name'],
+				$plugin_folder,
+				$version,
+				$url,
+			];
+		}//end if
+	}//end foreach
+
+	if ( ! empty( $public_table ) ) {
+		ksort( $public_table );
+		$table = new \TextTable( $columns, [] );
+		// increase the max length of the data to account for long urls for plugin homepages, otherwise the library
+		// will cutoff of the url
+		$table->maxlen = 300;
+		$table->addData( $public_table );
+		$public_markdown = $table->render();
+	}
+
+	if ( ! empty( $premium_table ) ) {
+		ksort( $premium_table );
+		$table = new \TextTable( $columns, [] );
+		// increase the max length of the data to account for long urls for plugin homepages, otherwise the library
+		// will cutoff of the url
+		$table->maxlen = 300;
+		$table->addData( $premium_table );
+		$premium_markdown = $table->render();
 	}
 
 	return sprintf(
@@ -2391,8 +2487,8 @@ function generate_plugins_markdown( $composer_json_required ) {
         ### Premium Plugins%1$s
         %3$s',
 		PHP_EOL,
-		implode( PHP_EOL, $public ),
-		implode( PHP_EOL, $premium )
+		$public_markdown,
+		$premium_markdown
 	);
 }
 
