@@ -639,6 +639,8 @@ function generate_composer_array() {
 	$plugins  = generate_composer_installed_plugins();
 	$themes   = generate_composer_installed_themes();
 
+	$composer['require']['core/wp'] = get_current_wordpress_version();
+
 	if ( ! empty( $plugins ) ) {
 		$composer['require'] = array_merge( $composer['require'], $plugins );
 	}
@@ -647,7 +649,6 @@ function generate_composer_array() {
 		$composer['require'] = array_merge( $composer['require'], $themes );
 	}
 
-	$composer['require']['cshp/wp'] = get_current_wordpress_version();
 	ksort( $composer['require'] );
 
 	return $composer;
@@ -2174,7 +2175,7 @@ add_action( 'admin_enqueue_scripts', __NAMESPACE__ . '\admin_enqueue', 9999 );
  * @return array Formatted array for use in a composer.json file.
  */
 function generate_composer_template() {
-	$relative_directory = basename( dirname( plugin_dir_path( __DIR__ ), 2 ) );
+	$relative_directory = basename( WP_CONTENT_DIR );
 	$composer           = [
 		'name'         => sprintf( '%s/wordpress', sanitize_key( get_bloginfo( 'name' ) ) ),
 		'description'  => sprintf( __( 'Installed plugins and themes for the WordPress install %s', get_textdomain() ), home_url() ),
@@ -2189,19 +2190,15 @@ function generate_composer_template() {
 				],
 			],
 			'1' => [
-				'type'    => 'package',
-				'package' => [
-					'name'    => 'cshp/premium-plugins',
-					'type'    => 'wordpress-plugin',
-					'version' => '1.0',
-					'dist'    => [
-						'url'  => get_api_active_plugin_downloads_endpoint(),
-						'type' => 'zip',
-					],
+				'type' => 'composer',
+				'url'  => remove_query_arg( [ 'token' ], get_api_active_plugin_downloads_endpoint() ),
+				'only' => [
+					'premium-plugin/*',
+					'premium-theme/*',
 				],
 			],
 		],
-		'require'      => [ 'cshp/premium-plugins' => '^1.0' ],
+		'require'      => [],
 		'extra'        => [
 			'installer-paths' => [
 				sprintf( '%s/plugins/${name}', $relative_directory ) => [
