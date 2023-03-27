@@ -2234,14 +2234,21 @@ function generate_wordpress_markdown() {
  * @return string Markdown for the installed themes.
  */
 function generate_themes_markdown( $composer_json_required ) {
-	$public           = [];
-	$premium          = [];
-	$public_markdown  = __( 'No public themes installed', get_textdomain() );
-	$premium_markdown = __( 'No premium themes installed', get_textdomain() );
-	$themes_data      = wp_get_themes();
-	$columns          = [ 'Name', 'Folder', 'Version', 'Theme URL/Author' ];
-	$public_table     = [];
-	$premium_table    = [];
+	$public                    = [];
+	$premium                   = [];
+	$public_markdown           = __( 'No public themes installed', get_textdomain() );
+	$premium_markdown          = __( 'No premium themes installed', get_textdomain() );
+	$themes_data               = wp_get_themes();
+	$current_theme             = wp_get_theme();
+	$current_theme_folder_name = '';
+	$columns                   = [ 'Status', 'Name', 'Folder', 'Version', 'Theme URL/Author' ];
+	$public_table              = [];
+	$premium_table             = [];
+
+	if ( ! empty( $current_theme ) ) {
+		$theme_path_info           = explode( DIRECTORY_SEPARATOR, $current_theme->get_stylesheet_directory() );
+		$current_theme_folder_name = end( $theme_path_info );
+	}
 
 	foreach ( $composer_json_required as $theme_name => $version ) {
 		$clean_name = str_replace( 'premium-theme/', '', str_replace( 'wpackagist-theme/', '', $theme_name ) );
@@ -2259,9 +2266,15 @@ function generate_themes_markdown( $composer_json_required ) {
 		$version           = ! empty( $theme->get( 'Version' ) ) ? $theme->get( 'Version' ) : '';
 		$theme_path_info   = explode( DIRECTORY_SEPARATOR, $theme->get_stylesheet_directory() );
 		$theme_folder_name = end( $theme_path_info );
+		$status            = __( 'Inactive', get_textdomain() );
+
+		if ( $theme_folder_name === $current_theme_folder_name ) {
+			$status = __( 'Active', get_textdomain() );
+		}
 
 		if ( in_array( $theme_folder_name, $public, true ) ) {
 			$public_table[ $theme_folder_name ] = [
+				$status,
 				$theme->get( 'Name' ),
 				$theme_folder_name,
 				$version,
@@ -2281,6 +2294,7 @@ function generate_themes_markdown( $composer_json_required ) {
 			}
 
 			$premium_table[ $theme_folder_name ] = [
+				$status,
 				$theme->get( 'Name' ),
 				$theme_folder_name,
 				$version,
@@ -2379,7 +2393,7 @@ function generate_themes_zip_command( $composer_json_required ) {
 	foreach ( $composer_json_required as $theme_name => $version ) {
 		$clean_name = str_replace( 'premium-theme/', '', str_replace( 'wpackagist-theme/', '', $theme_name ) );
 
-		if ( ! in_array( $clean_name, premium_themes_list(), true ) && false !== strpos( $theme_name, 'premium-theme' ) ) {
+		if ( false !== strpos( $theme_name, 'premium-theme' ) ) {
 			$data[] = $clean_name;
 		}
 	}
@@ -2411,9 +2425,10 @@ function generate_plugins_markdown( $composer_json_required ) {
 	$public_markdown  = __( 'No public plugins installed', get_textdomain() );
 	$premium_markdown = __( 'No premium plugins installed', get_textdomain() );
 	$plugins_data     = get_plugins();
-	$columns          = [ 'Name', 'Folder', 'Version', 'Plugin URL/Author' ];
+	$columns          = [ 'Status', 'Name', 'Folder', 'Version', 'Plugin URL/Author' ];
 	$public_table     = [];
 	$premium_table    = [];
+	$active_plugins   = get_active_plugins();
 
 	foreach ( $composer_json_required as $plugin_name => $version ) {
 		$clean_plugin_folder_name = str_replace( 'premium-plugin/', '', str_replace( 'wpackagist-plugin/', '', $plugin_name ) );
@@ -2430,9 +2445,15 @@ function generate_plugins_markdown( $composer_json_required ) {
 	foreach ( $plugins_data as $plugin_file => $data ) {
 		$version       = isset( $data['Version'] ) && ! empty( $data['Version'] ) ? $data['Version'] : '';
 		$plugin_folder = dirname( $plugin_file );
+		$status        = __( 'Inactive', get_textdomain() );
+
+		if ( in_array( $plugin_file, $active_plugins, true ) ) {
+			$status = __( 'Active', get_textdomain() );
+		}
 
 		if ( in_array( $plugin_folder, $public, true ) ) {
 			$public_table[ $plugin_folder ] = [
+				$status,
 				$data['Name'],
 				$plugin_folder,
 				$version,
@@ -2452,6 +2473,7 @@ function generate_plugins_markdown( $composer_json_required ) {
 			}
 
 			$premium_table[ $plugin_folder ] = [
+				$status,
 				$data['Name'],
 				$plugin_folder,
 				$version,
@@ -2537,7 +2559,7 @@ function generate_plugins_zip_command( $composer_json_required ) {
 	foreach ( $composer_json_required as $plugin_name => $version ) {
 		$clean_name = str_replace( 'premium-plugin/', '', str_replace( 'wpackagist-plugin/', '', $plugin_name ) );
 
-		if ( ! in_array( $clean_name, premium_plugins_list(), true ) && false !== strpos( $plugin_name, 'premium-plugin' ) ) {
+		if ( false !== strpos( $plugin_name, 'premium-plugin' ) ) {
 			$data[] = $clean_name;
 		}
 	}
