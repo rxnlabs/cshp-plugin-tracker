@@ -2339,8 +2339,11 @@ function generate_themes_markdown( $composer_json_required ) {
 		'## Themes Installed%1$s
         ### Wordpress.org Themes%1$s
         %2$s
+        %1$s
         ### Premium Themes%1$s
-        %3$s',
+        %3$s
+        %1$s
+        ',
 		PHP_EOL,
 		$public_markdown,
 		$premium_markdown
@@ -2518,8 +2521,11 @@ function generate_plugins_markdown( $composer_json_required ) {
 		'## Plugins Installed%1$s
         ### Wordpress.org Plugins%1$s
         %2$s
+        %1$s
         ### Premium Plugins%1$s
-        %3$s',
+        %3$s
+        %1$s
+        ',
 		PHP_EOL,
 		$public_markdown,
 		$premium_markdown
