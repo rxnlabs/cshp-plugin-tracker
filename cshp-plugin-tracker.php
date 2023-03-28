@@ -30,7 +30,7 @@ load_non_composer_libraries();
 require_once 'inc/license.php';
 
 // load the WP CLI commands
-if ( is_wp_cli_action() ) {
+if ( is_wp_cli_environment() ) {
 	require_once 'inc/wp-cli.php';
 }
 
@@ -82,7 +82,7 @@ function flush_composer_post_update( $wp_upgrader, $upgrade_data ) {
 	if ( isset( $upgrade_data['type'] ) &&
 		 in_array( strtolower( $upgrade_data['type'] ), [ 'plugin', 'theme', 'core' ], true ) ) {
 		// set a cron job if we are doing bulk upgrades of plugins or themes or if we are using WP CLI
-		if ( is_wp_cli_action() || true === $is_maybe_bulk_upgrade ) {
+		if ( is_wp_cli_environment() || true === $is_maybe_bulk_upgrade ) {
 			update_plugin_tracker_file_post_bulk_update();
 		} elseif ( should_real_time_update() ) {
 			create_plugin_tracker_file();
@@ -100,7 +100,7 @@ add_action( 'upgrader_process_complete', __NAMESPACE__ . '\flush_composer_post_u
  * @return void
  */
 function flush_composer_post_activate_plugin( $plugin, $network_wide ) {
-	if ( is_wp_cli_action() ) {
+	if ( is_wp_cli_environment() ) {
 		update_plugin_tracker_file_post_bulk_update();
 	} else {
 		should_real_time_update() && create_plugin_tracker_file();
@@ -117,7 +117,7 @@ add_action( 'activated_plugin', __NAMESPACE__ . '\flush_composer_post_activate_p
  * @return void
  */
 function flush_composer_post_theme_switch( $old_theme_name, $old_theme ) {
-	if ( is_wp_cli_action() ) {
+	if ( is_wp_cli_environment() ) {
 		update_plugin_tracker_file_post_bulk_update();
 	} else {
 		should_real_time_update() && create_plugin_tracker_file();
@@ -136,7 +136,7 @@ add_action( 'after_switch_theme', __NAMESPACE__ . '\flush_composer_post_theme_sw
 function flush_composer_plugin_uninstall( $plugin_relative_file, $uninstallable_plugins ) {
 	$file = plugin_basename( $plugin_relative_file );
 
-	if ( is_wp_cli_action() ) {
+	if ( is_wp_cli_environment() ) {
 		update_plugin_tracker_file_post_bulk_update();
 	} elseif ( should_real_time_update() ) {
 		// run this when the plugin is successfully uninstalled
@@ -159,7 +159,7 @@ add_action( 'pre_uninstall_plugin', __NAMESPACE__ . '\flush_composer_plugin_unin
  * @return void
  */
 function flush_composer_theme_delete( $stylesheet ) {
-	if ( is_wp_cli_action() ) {
+	if ( is_wp_cli_environment() ) {
 		update_plugin_tracker_file_post_bulk_update();
 	} else {
 		should_real_time_update() && create_plugin_tracker_file();
@@ -203,12 +203,27 @@ function plugin_update_checker() {
 add_action( 'init', __NAMESPACE__ . '\plugin_update_checker' );
 
 /*
- * Try to determine if an action is being run via WP CLI
+ * Try to determine if this plugin is being run via WP CLI
  *
  * @return bool True if WP CLI is running. False if WP CLI is not running or cannot be detected.
  */
-function is_wp_cli_action() {
+function is_wp_cli_environment() {
 	if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Determine if the currently logged-in user has the appropriate permissions to manage this plugin.
+ *
+ * @return bool True if the user is authorized. False, if the user is not authorized.
+ */
+function is_user_authorized() {
+	if ( is_user_logged_in() &&
+		 ! empty( wp_get_current_user() ) &&
+		 current_user_can( 'manage_options' ) ) {
 		return true;
 	}
 
@@ -260,7 +275,7 @@ function create_log_post_type() {
 			'menu_position'         => null,
 			'menu_icon'             => 'dashicons-analytics',
 			'taxonomy'              => [ get_log_taxonomy() ],
-			'show_in_rest'          => is_user_logged_in() ?: false,
+			'show_in_rest'          => is_user_authorized(),
 			'rest_base'             => get_log_post_type(),
 			'rest_controller_class' => 'WP_REST_Posts_Controller',
 		]
@@ -302,12 +317,12 @@ function create_log_post_type() {
 			'query_var'             => true,
 			'rewrite'               => true,
 			'capabilities'          => [
-				'manage_terms' => 'edit_posts',
-				'edit_terms'   => 'edit_posts',
-				'delete_terms' => 'edit_posts',
-				'assign_terms' => 'edit_posts',
+				'manage_terms' => 'manage_options',
+				'edit_terms'   => 'manage_options',
+				'delete_terms' => 'manage_options',
+				'assign_terms' => 'manage_options',
 			],
-			'show_in_rest'          => is_user_logged_in() ?: false,
+			'show_in_rest'          => is_user_authorized(),
 			'rest_base'             => get_log_taxonomy(),
 			'rest_controller_class' => 'WP_REST_Terms_Controller',
 		]
@@ -1012,7 +1027,7 @@ function read_plugins_file() {
 		return;
 	}
 
-	return wp_json_file_decode( $plugins_file );
+	return wp_json_file_decode( $plugins_file, [ 'associative' => true ] );
 }
 
 /**
@@ -1097,7 +1112,7 @@ function zip_missing_plugins() {
 
 	if ( class_exists( '\ZipArchive' ) ) {
 		// if we are using WP CLI, allow the zip of plugins to be generated multiple times
-		if ( ! is_wp_cli_action() ) {
+		if ( ! is_wp_cli_environment() ) {
 			if ( does_zip_exists( get_missing_plugin_zip_file() ) && ! is_plugin_zip_old() ) {
 				log_request( 'plugin_zip_download' );
 				return get_missing_plugin_zip_file();
@@ -1164,7 +1179,7 @@ function zip_missing_themes() {
 	if ( class_exists( '\ZipArchive' ) ) {
 
 		// if we are using WP CLI, allow the zip of themes to be generated multiple times
-		if ( ! is_wp_cli_action() ) {
+		if ( ! is_wp_cli_environment() ) {
 			if ( does_zip_exists( get_missing_theme_zip_file() ) && ! is_theme_zip_old() ) {
 				log_request( 'theme_zip_download' );
 				return get_missing_theme_zip_file();
@@ -1872,7 +1887,7 @@ add_action( 'admin_init', __NAMESPACE__ . '\register_options_admin_settings' );
  * @return void
  */
 function admin_page() {
-	if ( ! current_user_can( 'manage_options' ) ) {
+	if ( ! is_user_authorized() ) {
 		return;
 	}
 	$default_tab = null;
@@ -2141,7 +2156,7 @@ function admin_notice() {
 	if ( ! empty( get_current_screen() ) &&
 		 'settings_page_cshp-plugin-tracker' === get_current_screen()->id &&
 		 is_wordpress_org_external_request_blocked() &&
-		 current_user_can( 'manage_options' ) ) {
+		 is_user_authorized() ) {
 		echo sprintf( '<div class="notice notice-error is-dismissible cshp-pt-notice"><p>%s</p></div>', esc_html__( 'External requests to wordpress.org are being blocked. When generating the plugin tracker file, all themes and plugins will be considered premium. Unblock requests to wordpress.org to fix this. Update the PHP constant "WP_ACCESSIBLE_HOSTS" to include exception for *.wordpress.org', get_textdomain() ) );
 	}
 }
