@@ -679,11 +679,10 @@ function generate_readme() {
 	$plugins = generate_composer_installed_plugins();
 
 	// replace leading spaces on each new line to format the README file correctly
-	return preg_replace(
-		'/^\s+/m',
-		'',
-		sprintf(
-			'
+    // works better than doing a preg_replace( '/^\s+/m', '', 'string' ) since preg_replace also wipes out
+    //  multiple lines breaks, which breaks the formatting of the README.md file
+	return join("\n", array_map("trim", explode("\n",
+		sprintf( '
             %1$s
             %2$s
             %3$s
@@ -709,7 +708,7 @@ function generate_readme() {
 			generate_themes_zip_command( $themes ),
 			generate_plugins_zip_command( $plugins )
 		)
-	);
+	) ) );
 }
 
 /**
