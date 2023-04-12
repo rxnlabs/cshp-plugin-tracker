@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * <command>
  * : The command to perform. Available commands are:
- * - "generate" command will generate the installed plugins and themes plugin tracker file.
+ * - "generate" command will generate the installed plugins and themes tracker file.
  * - "plugin-zip" command will generate the zip of the installed premium plugins.
  * - "theme-zip" command will generate the zip of the installed premium themes.
  *
@@ -102,3 +102,23 @@ function wp_cli_commands( $args, $assoc_args ) {
 	}
 }
 \WP_CLI::add_command( 'cshp-pt', __NAMESPACE__ . '\wp_cli_commands' );
+
+/**
+ * Update the installed plugins and themes tracker file after a plugin or theme is installed, updated, or deleted
+ * with WP CLI.
+ *
+ * @return void
+ */
+function wp_cli_post_update() {
+	\WP_CLI::runcommand( 'cshp-pt generate' );
+}
+\WP_CLI::add_hook( 'after_invoke:core update', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:core download', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:plugin install', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:plugin uninstall', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:plugin delete', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:plugin update', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:theme install', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:theme uninstall', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:theme delete', __NAMESPACE__ . '\wp_cli_post_update' );
+\WP_CLI::add_hook( 'after_invoke:theme update', __NAMESPACE__ . '\wp_cli_post_update' );

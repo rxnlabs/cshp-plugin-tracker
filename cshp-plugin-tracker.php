@@ -94,12 +94,21 @@ add_action( 'upgrader_process_complete', __NAMESPACE__ . '\flush_composer_post_u
 /**
  * Flush the uploads directory composer.json file after a plugin is activated.
  *
- * @param string $plugin Path to the main plugin file that was activated.
- * @param bool   $network_wide Whether the plugin was enabled on all sites in .a multisite.
+ * @param string $plugin Path to the main plugin file that was activated (path is relative to the plugins directory).
+ * @param bool   $network_wide Whether the plugin was enabled on all sites in a multisite.
  *
  * @return void
  */
 function flush_composer_post_activate_plugin( $plugin, $network_wide ) {
+	$plugin_data = get_plugin_data( get_plugin_file_full_path( $plugin ), false );
+	$plugin_name = '';
+
+	if ( ! empty( $plugin_data ) ) {
+		$plugin_name = $plugin_data['Name'];
+	}
+
+	log_request( 'plugin_activate', $plugin_name );
+
 	if ( is_wp_cli_environment() ) {
 		update_plugin_tracker_file_post_bulk_update();
 	} else {
@@ -109,21 +118,30 @@ function flush_composer_post_activate_plugin( $plugin, $network_wide ) {
 add_action( 'activated_plugin', __NAMESPACE__ . '\flush_composer_post_activate_plugin', 10, 2 );
 
 /**
- * Flush the uploads directory composer.json file after a theme is activated.
+ * Flush the uploads directory composer.json file after a plugin is deactivated.
  *
- * @param string    $old_theme_name Name of the old theme.
- * @param \WP_Theme $old_theme Theme object of the old theme.
+ * @param string $plugin Path to the main plugin file that was deactivated (path is relative to the plugins directory).
+ * @param bool   $network_wide Whether the plugin was disabled on all sites in a multisite.
  *
  * @return void
  */
-function flush_composer_post_theme_switch( $old_theme_name, $old_theme ) {
+function flush_composer_post_deactivate_plugin( $plugin, $network_wide ) {
+	$plugin_data = get_plugin_data( get_plugin_file_full_path( $plugin ), false );
+	$plugin_name = '';
+
+	if ( ! empty( $plugin_data ) ) {
+		$plugin_name = $plugin_data['Name'];
+	}
+
+	log_request( 'plugin_deactivate', $plugin_name );
+
 	if ( is_wp_cli_environment() ) {
 		update_plugin_tracker_file_post_bulk_update();
 	} else {
 		should_real_time_update() && create_plugin_tracker_file();
 	}
 }
-add_action( 'after_switch_theme', __NAMESPACE__ . '\flush_composer_post_theme_switch', 10, 2 );
+add_action( 'deactivated_plugin', __NAMESPACE__ . '\flush_composer_post_deactivate_plugin', 10, 2 );
 
 /**
  * Flush the uploads directory composer.json file after a plugin is uninstalled
@@ -134,7 +152,15 @@ add_action( 'after_switch_theme', __NAMESPACE__ . '\flush_composer_post_theme_sw
  * @return void
  */
 function flush_composer_plugin_uninstall( $plugin_relative_file, $uninstallable_plugins ) {
-	$file = plugin_basename( $plugin_relative_file );
+	$file        = plugin_basename( $plugin_relative_file );
+	$plugin_name = '';
+	$plugin_data = get_plugin_data( get_plugin_file_full_path( $plugin_relative_file ), false );
+
+	if ( ! empty( $plugin_data ) ) {
+		$plugin_name = $plugin_data['Name'];
+	}
+
+	log_request( 'plugin_uninstall', $plugin_name );
 
 	if ( is_wp_cli_environment() ) {
 		update_plugin_tracker_file_post_bulk_update();
@@ -152,6 +178,28 @@ function flush_composer_plugin_uninstall( $plugin_relative_file, $uninstallable_
 add_action( 'pre_uninstall_plugin', __NAMESPACE__ . '\flush_composer_plugin_uninstall', 10, 2 );
 
 /**
+ * Flush the uploads directory composer.json file after a theme is activated.
+ *
+ * @param string    $old_theme_name Name of the old theme.
+ * @param \WP_Theme $old_theme Theme object of the old theme.
+ *
+ * @return void
+ */
+function flush_composer_post_theme_switch( $old_theme_name, $old_theme ) {
+	$current_theme = wp_get_theme();
+
+	log_request( 'theme_deactivate', $old_theme_name );
+	log_request( 'theme_activate', $current_theme->get( 'Name' ) );
+
+	if ( is_wp_cli_environment() ) {
+		update_plugin_tracker_file_post_bulk_update();
+	} else {
+		should_real_time_update() && create_plugin_tracker_file();
+	}
+}
+add_action( 'after_switch_theme', __NAMESPACE__ . '\flush_composer_post_theme_switch', 10, 2 );
+
+/**
  * Flush the uploads directory composer.json file after a theme is deleted
  *
  * @param string $stylesheet Name of the theme stylesheet that was just deleted.
@@ -159,6 +207,15 @@ add_action( 'pre_uninstall_plugin', __NAMESPACE__ . '\flush_composer_plugin_unin
  * @return void
  */
 function flush_composer_theme_delete( $stylesheet ) {
+	$theme      = wp_get_theme( $stylesheet );
+	$theme_name = '';
+
+	if ( ! empty( $theme ) ) {
+		$theme_name = $theme->get( 'Name' );
+	}
+
+	log_request( 'theme_delete', $theme_name );
+
 	if ( is_wp_cli_environment() ) {
 		update_plugin_tracker_file_post_bulk_update();
 	} else {
@@ -345,26 +402,30 @@ add_action( 'init', __NAMESPACE__ . '\create_log_post_type' );
  * @return void
  */
 function limit_log_post_type( $post_id, $post, $update ) {
-	if ( get_log_post_type() !== get_post_type( $post ) || 200 < wp_count_posts( get_log_post_type() ) ) {
+	if ( get_log_post_type() !== get_post_type( $post ) ) {
 		return;
 	}
 
-	$query = new \WP_Query(
-		[
-			'post_type'              => get_log_post_type(),
-			'posts_per_page'         => 10,
-			'offset'                 => 10,
-			'order'                  => 'DESC',
-			'orderby'                => 'date',
-			'fields'                 => 'ids',
-			'update_post_meta_cache' => false,
-			'update_post_term_cache' => false,
-		]
-	);
+	$posts_count = wp_count_posts( get_log_post_type() );
 
-	if ( ! is_wp_error( $query ) && ! empty( $query->posts ) ) {
-		foreach ( $query->posts as $post_id ) {
-			wp_delete_post( $post_id, true );
+	if ( is_int( $posts_count ) && 200 < $posts_count ) {
+		$query = new \WP_Query(
+			[
+				'post_type'              => get_log_post_type(),
+				'posts_per_page'         => 10,
+				'offset'                 => 10,
+				'order'                  => 'DESC',
+				'orderby'                => 'date',
+				'fields'                 => 'ids',
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			]
+		);
+
+		if ( ! is_wp_error( $query ) && ! empty( $query->posts ) ) {
+			foreach ( $query->posts as $post_id ) {
+				wp_delete_post( $post_id, true );
+			}
 		}
 	}
 }
@@ -560,6 +621,12 @@ function generate_default_terms() {
 		'theme_zip_download'         => __( 'Theme Zip Download', get_textdomain() ),
 		'plugin_zip_error'           => __( 'Plugin Zip Generate Error', get_textdomain() ),
 		'theme_zip_error'            => __( 'Theme Zip Generate Error', get_textdomain() ),
+		'plugin_activate'            => __( 'Plugin Activate', get_textdomain() ),
+		'plugin_deactivate'          => __( 'Plugin Deactivate', get_textdomain() ),
+		'plugin_uninstall'           => __( 'Plugin Uninstall', get_textdomain() ),
+		'theme_activate'             => __( 'Theme Activate', get_textdomain() ),
+		'theme_deactivate'           => __( 'Theme Deactivate', get_textdomain() ),
+		'theme_uninstall'            => __( 'Theme Uninstall', get_textdomain() ),
 	];
 
 	if ( ! wp_count_terms( get_log_taxonomy() ) ) {
@@ -679,8 +746,8 @@ function generate_readme() {
 	$plugins = generate_composer_installed_plugins();
 
 	// replace leading spaces on each new line to format the README file correctly
-    // works better than doing a preg_replace( '/^\s+/m', '', 'string' ) since preg_replace also wipes out
-    //  multiple lines breaks, which breaks the formatting of the README.md file
+	// works better than doing a preg_replace( '/^\s+/m', '', 'string' ) since preg_replace also wipes out
+	//  multiple lines breaks, which breaks the formatting of the README.md file
 	return join("\n", array_map("trim", explode("\n",
 		sprintf( '
             %1$s
@@ -1636,11 +1703,13 @@ function log_request( $type, $message = '' ) {
 		}
 	}
 
-	$request_url   = add_query_arg( array_merge( $get_clean, $wp->query_vars ), home_url( $wp->request ) );
-	$allowed_types = get_allowed_log_types();
-	$title         = '';
-	$content       = '';
-	$term_object   = null;
+	$request_url            = add_query_arg( array_merge( $get_clean, $wp->query_vars ), home_url( $wp->request ) );
+	$allowed_types          = get_allowed_log_types();
+	$title                  = '';
+	$content                = '';
+	$term_object            = null;
+	$use_message_for_title  = [ 'plugin_activate', 'plugin_deactivate', 'plugin_uninstall', 'theme_activate', 'theme_deactivate', 'theme_uninstall' ];
+	$user_geo_location_data = sprintf( __( 'IP Address: %1$s. Geolocation: %2$s', get_textdomain() ), get_request_ip_address(), get_request_geolocation() );
 
 	if ( ! empty( $message ) ) {
 		$content = $message;
@@ -1653,32 +1722,40 @@ function log_request( $type, $message = '' ) {
 			}
 
 			$term_object = $allowed_type;
-			$title       = $term_object->name;
+			$title       = sprintf( '%s:', $term_object->name );
 
 			if ( false !== strpos( $type, 'token_' ) ) {
 				$title = sprintf( '%s %s', $title, get_stored_token() );
-			} elseif ( false !== strpos( $type, 'plugin_' ) ) {
+			} elseif ( false !== strpos( $type, 'plugin_zip' ) ) {
 				$title = sprintf( '%s %s', $title, get_missing_plugin_zip_file() );
-			} elseif ( false !== strpos( $type, 'theme_' ) ) {
+			} elseif ( false !== strpos( $type, 'theme_zip' ) ) {
 				$title = sprintf( '%s %s', $title, get_missing_theme_zip_file() );
+			} elseif ( in_array( $type, $use_message_for_title, true ) ) {
+				$title = sprintf( '%s %s', $title, $message );
 			}
 
 			break;
 		}
-	}
+	}//end if
 
 	if ( is_user_logged_in() ) {
 		$title = sprintf( __( '%1$s by %2$s', get_textdomain() ), $title, wp_get_current_user()->user_login );
 	}
 
 	if ( false !== strpos( $type, 'download' ) ) {
-		$content = sprintf( __( 'Downloaded by IP address %s', get_textdomain() ), sanitize_text_field( get_request_ip_address() ) );
+		$content = sprintf( __( 'Downloaded by %s', get_textdomain() ), sanitize_text_field( $user_geo_location_data ) );
 	} elseif ( false !== strpos( $type, 'create' ) ) {
-		$content = sprintf( __( 'Generated by IP address %s', get_textdomain() ), sanitize_text_field( get_request_ip_address() ) );
+		$content = sprintf( __( 'Generated by %s', get_textdomain() ), sanitize_text_field( $user_geo_location_data ) );
 	} elseif ( false !== strpos( $type, 'delete' ) ) {
-		$content = sprintf( __( 'Deleted by IP address %s', get_textdomain() ), sanitize_text_field( get_request_ip_address() ) );
+		$content = sprintf( __( 'Deleted by %s', get_textdomain() ), sanitize_text_field( $user_geo_location_data ) );
 	} elseif ( false !== strpos( $type, 'verify_fail' ) ) {
-		$content = sprintf( __( 'Verification failed by IP address %s', get_textdomain() ), sanitize_text_field( get_request_ip_address() ) );
+		$content = sprintf( __( 'Verification failed by %s', get_textdomain() ), sanitize_text_field( $user_geo_location_data ) );
+	} elseif ( false !== strpos( $type, 'activate' ) ) {
+		$content = sprintf( __( 'Activated by %s', get_textdomain() ), sanitize_text_field( $user_geo_location_data ) );
+	} elseif ( false !== strpos( $type, 'deactivate' ) ) {
+		$content = sprintf( __( 'Deactivated by %s', get_textdomain() ), sanitize_text_field( $user_geo_location_data ) );
+	} elseif ( false !== strpos( $type, 'uninstall' ) ) {
+		$content = sprintf( __( 'Uninstalled by %s', get_textdomain() ), sanitize_text_field( $user_geo_location_data ) );
 	}
 
 	if ( ! empty( $title ) && ! empty( $term_object ) ) {
@@ -1693,8 +1770,9 @@ function log_request( $type, $message = '' ) {
 					$term_object->taxonomy => [ $term_object->slug ],
 				],
 				'meta_input'   => [
-					'ip_address' => get_request_ip_address(),
-					'url'        => $request_url,
+					'ip_address'   => get_request_ip_address(),
+					'geo_location' => get_request_geolocation(),
+					'url'          => $request_url,
 				],
 			]
 		);
@@ -1726,6 +1804,114 @@ function get_request_ip_address() {
 	}
 
 	return $ip;
+}
+
+/**
+ * Try to get the location of the current user so we can log who is doing actions like adding plugins and themes
+ *
+ * @return string Location of the current user or empty string if no location can be found
+ */
+function get_request_geolocation() {
+	$city         = '';
+	$region       = '';
+	$country      = '';
+	$country_code = '';
+	$postal_code  = '';
+	$location     = '';
+	$ip_address   = get_request_ip_address();
+
+	// test if Kinsta has Geo IP tool enabled for this site
+	if ( isset( $_SERVER['GEOIP_COUNTRY_NAME'] ) && ! empty( $_SERVER['GEOIP_COUNTRY_NAME'] ) ) {
+		$country = sanitize_text_field( $_SERVER['GEOIP_COUNTRY_NAME'] );
+	}
+
+	if ( isset( $_SERVER['GEOIP_COUNTRY_CODE'] ) && ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) {
+		$country_code = sanitize_text_field( $_SERVER['GEOIP_COUNTRY_CODE'] );
+	}
+
+	if ( isset( $_SERVER['GEOIP_REGION'] ) && ! empty( $_SERVER['GEOIP_REGION'] ) ) {
+		$region = sanitize_text_field( $_SERVER['GEOIP_REGION'] );
+	}
+
+	if ( isset( $_SERVER['GEOIP_CITY'] ) && ! empty( $_SERVER['GEOIP_CITY'] ) ) {
+		$city = sanitize_text_field( $_SERVER['GEOIP_CITY'] );
+	}
+
+	if ( isset( $_SERVER['GEOIP_POSTAL_CODE'] ) && ! empty( $_SERVER['GEOIP_POSTAL_CODE'] ) ) {
+		$postal_code = sanitize_text_field( $_SERVER['GEOIP_POSTAL_CODE'] );
+	}
+
+	if ( ! empty( $ip_address ) && ( empty( $country ) ) ) {
+		$url           = sprintf( 'https://ipapi.co/%s/json', $ip_address );
+		$location_info = wp_remote_get( $url );
+
+		if ( ! is_wp_error( $location_info ) && 200 === wp_remote_retrieve_response_code( $location_info ) ) {
+			$response = json_decode( wp_remote_retrieve_body( $location_info ), true );
+
+			if ( is_null( $response ) ) {
+				$response = [];
+			}
+
+			if ( isset( $response['country_name'] ) && ! empty( $response['country_name'] ) ) {
+				$country = sanitize_text_field( $response['country_name'] );
+			}
+
+			if ( isset( $response['country_code'] ) && ! empty( $response['country_code'] ) ) {
+				$country_code = sanitize_text_field( $response['country_code'] );
+			}
+
+			if ( isset( $response['region'] ) && ! empty( $response['region'] ) ) {
+				$region = sanitize_text_field( $response['region'] );
+			}
+
+			if ( isset( $response['city'] ) && ! empty( $response['city'] ) ) {
+				$city = sanitize_text_field( $response['city'] );
+			}
+
+			if ( isset( $response['postal'] ) && ! empty( $response['postal'] ) ) {
+				$postal_code = sanitize_text_field( $response['postal'] );
+			}
+		}//end if
+
+		if ( empty( $country ) ) {
+			$url           = sprintf( 'https://get.geojs.io/v1/ip/geo/%s.json', $ip_address );
+			$location_info = wp_remote_get( $url );
+
+			if ( ! is_wp_error( $location_info ) && 200 === wp_remote_retrieve_response_code( $location_info ) ) {
+				$response = json_decode( wp_remote_retrieve_body( $location_info ), true );
+
+				if ( is_null( $response ) ) {
+					$response = [];
+				}
+
+				if ( isset( $response['country'] ) && ! empty( $response['country'] ) ) {
+					$country = sanitize_text_field( $response['country'] );
+				}
+
+				if ( isset( $response['country_code'] ) && ! empty( $response['country_code'] ) ) {
+					$country_code = sanitize_text_field( $response['country_code'] );
+				}
+
+				if ( isset( $response['region'] ) && ! empty( $response['region'] ) ) {
+					$region = sanitize_text_field( $response['region'] );
+				}
+
+				if ( isset( $response['city'] ) && ! empty( $response['city'] ) ) {
+					$city = sanitize_text_field( $response['city'] );
+				}
+			}//end if
+		}//end if
+	}//end if
+
+	if ( ! empty( $country ) ) {
+		$location = sprintf( '%s, %s, %s', $city, $region, $country );
+
+		if ( ! empty( $postal_code ) ) {
+			$location = sprintf( '%s, %s', $location, $postal_code );
+		}
+	}
+
+	return $location;
 }
 
 /**
@@ -2199,6 +2385,7 @@ function generate_composer_template() {
 				'type' => 'composer',
 				'url'  => 'https://wpackagist.org',
 				'only' => [
+					'wpackagist-muplugin/*',
 					'wpackagist-plugin/*',
 					'wpackagist-theme/*',
 				],
@@ -2209,16 +2396,20 @@ function generate_composer_template() {
 				'only' => [
 					'premium-plugin/*',
 					'premium-theme/*',
+					'core/wp',
 				],
 			],
 		],
 		'require'      => [],
 		'extra'        => [
 			'installer-paths' => [
-				sprintf( '%s/plugins/${name}', $relative_directory ) => [
+				sprintf( '%s/mu-plugins/{$name}/', $relative_directory ) => [
+					'type:wordpress-muplugin',
+				],
+				sprintf( '%s/plugins/{$name}/', $relative_directory ) => [
 					'type:wordpress-plugin',
 				],
-				sprintf( '%s/themes/${name}', $relative_directory ) => [
+				sprintf( '%s/themes/{$name}/', $relative_directory ) => [
 					'type:wordpress-theme',
 				],
 			],
