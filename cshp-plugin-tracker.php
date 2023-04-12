@@ -273,15 +273,17 @@ function is_wp_cli_environment() {
 }
 
 /**
- * Determine if the currently logged-in user has the appropriate permissions to manage this plugin.
+ * Determine if the currently logged-in user has a Cornershop Creative email address
  *
- * @return bool True if the user is authorized. False, if the user is not authorized.
+ * @return bool True if the user is a Cornershop employee. False if the user is not using a Cornershop email.
  */
-function is_user_authorized() {
-	if ( is_user_logged_in() &&
-		 ! empty( wp_get_current_user() ) &&
-		 current_user_can( 'manage_options' ) ) {
-		return true;
+function is_cornershop_user() {
+	if ( is_user_logged_in() && current_user_can( 'manage_options' ) ) {
+		$user = wp_get_current_user();
+		// Cornershop user?
+		if ( '@cshp.co' === substr( $user->user_email, -8 ) || '@cornershopcreative.com' === substr( $user->user_email, -23 ) ) {
+			return true;
+		}
 	}
 
 	return false;
@@ -332,7 +334,7 @@ function create_log_post_type() {
 			'menu_position'         => null,
 			'menu_icon'             => 'dashicons-analytics',
 			'taxonomy'              => [ get_log_taxonomy() ],
-			'show_in_rest'          => is_user_authorized(),
+			'show_in_rest'          => is_cornershop_user(),
 			'rest_base'             => get_log_post_type(),
 			'rest_controller_class' => 'WP_REST_Posts_Controller',
 		]
@@ -379,7 +381,7 @@ function create_log_post_type() {
 				'delete_terms' => 'manage_options',
 				'assign_terms' => 'manage_options',
 			],
-			'show_in_rest'          => is_user_authorized(),
+			'show_in_rest'          => is_cornershop_user(),
 			'rest_base'             => get_log_taxonomy(),
 			'rest_controller_class' => 'WP_REST_Terms_Controller',
 		]
@@ -747,9 +749,15 @@ function generate_readme() {
 
 	// replace leading spaces on each new line to format the README file correctly
 	// works better than doing a preg_replace( '/^\s+/m', '', 'string' ) since preg_replace also wipes out
-	//  multiple lines breaks, which breaks the formatting of the README.md file
-	return join("\n", array_map("trim", explode("\n",
-		sprintf( '
+	// multiple lines breaks, which breaks the formatting of the README.md file
+	return join(
+		"\n",
+		array_map(
+			'trim',
+			explode(
+				"\n",
+				sprintf(
+					'
             %1$s
             %2$s
             %3$s
@@ -765,17 +773,19 @@ function generate_readme() {
             %8$s
             %2$s
             %9$s',
-			generate_wordpress_markdown(),
-			PHP_EOL,
-			generate_wordpress_wp_cli_install_command(),
-			generate_themes_markdown( $themes ),
-			generate_plugins_markdown( $plugins ),
-			generate_themes_wp_cli_install_command( $themes ),
-			generate_plugins_wp_cli_install_command( $plugins ),
-			generate_themes_zip_command( $themes ),
-			generate_plugins_zip_command( $plugins )
+					generate_wordpress_markdown(),
+					PHP_EOL,
+					generate_wordpress_wp_cli_install_command(),
+					generate_themes_markdown( $themes ),
+					generate_plugins_markdown( $plugins ),
+					generate_themes_wp_cli_install_command( $themes ),
+					generate_plugins_wp_cli_install_command( $plugins ),
+					generate_themes_zip_command( $themes ),
+					generate_plugins_zip_command( $plugins )
+				)
+			)
 		)
-	) ) );
+	);
 }
 
 /**
@@ -1962,6 +1972,10 @@ function save_theme_zip_file( $zip_file_path ) {
  * @return void
  */
 function add_options_admin_menu() {
+	if ( ! is_cornershop_user() ) {
+		return;
+	}
+
 	add_options_page(
 		__( 'Cornershop Plugin Tracker' ),
 		__( 'Cornershop Plugin Tracker' ),
@@ -1974,6 +1988,11 @@ add_action( 'admin_menu', __NAMESPACE__ . '\add_options_admin_menu' );
 
 function add_settings_link() {
 	$filter_name = sprintf( 'plugin_action_links_%s', plugin_basename( __FILE__ ) );
+
+	if ( ! is_cornershop_user() ) {
+		return;
+	}
+
 	add_filter(
 		$filter_name,
 		function ( $links ) {
@@ -2072,7 +2091,7 @@ add_action( 'admin_init', __NAMESPACE__ . '\register_options_admin_settings' );
  * @return void
  */
 function admin_page() {
-	if ( ! is_user_authorized() ) {
+	if ( ! is_cornershop_user() ) {
 		return;
 	}
 	$default_tab = null;
@@ -2341,7 +2360,7 @@ function admin_notice() {
 	if ( ! empty( get_current_screen() ) &&
 		 'settings_page_cshp-plugin-tracker' === get_current_screen()->id &&
 		 is_wordpress_org_external_request_blocked() &&
-		 is_user_authorized() ) {
+		 is_cornershop_user() ) {
 		echo sprintf( '<div class="notice notice-error is-dismissible cshp-pt-notice"><p>%s</p></div>', esc_html__( 'External requests to wordpress.org are being blocked. When generating the plugin tracker file, all themes and plugins will be considered premium. Unblock requests to wordpress.org to fix this. Update the PHP constant "WP_ACCESSIBLE_HOSTS" to include exception for *.wordpress.org', get_textdomain() ) );
 	}
 }
