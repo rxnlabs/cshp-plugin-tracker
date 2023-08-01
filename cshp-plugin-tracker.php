@@ -3,7 +3,7 @@
 Plugin Name: Cornershop Plugin Tracker
 Plugin URI: https://cornershopcreative.com/
 Description: Keep track of the current versions of themes and plugins installed on a WordPress site. This plugin should <strong>ALWAYS be Active</strong> unless you are having an issue where this plugin is the problem. If you are having issues with this plugin, please contact Cornershop Creative's support.
-Version: 1.0.1
+Version: 1.0.11
 Text Domain: cshp-pt
 Author: Cornershop Creative
 Author URI: https://cornershopcreative.com/
@@ -1128,9 +1128,9 @@ function update_plugin_tracker_file_post_bulk_update() {
 	// generate a cron expression for Action Scheduler to run one minute after plugin upgrades.
 	// get minute without leading zero to conform to Crontab specification
 	$one_minute_later_cron_expression = sprintf( '%d %d * * *', (int) $one_minute_later->format( 'i' ), $one_minute_later->format( 'G' ) );
-	if ( function_exists( '\as_schedule_cron_action' ) && ! as_has_scheduled_action( 'cshp_pt_regenerate_composer_post_bulk_update', [], 'cshp_pt' ) ) {
+	if ( function_exists( '\as_schedule_cron_action' ) && ! \as_has_scheduled_action( 'cshp_pt_regenerate_composer_post_bulk_update', [], 'cshp_pt' ) ) {
 		// schedule action scheduler to run once a day
-		as_schedule_cron_action( strtotime( 'now' ), $one_minute_later_cron_expression, 'cshp_pt_regenerate_composer_post_bulk_update', [], 'cshp_pt' );
+		\as_schedule_cron_action( strtotime( 'now' ), $one_minute_later_cron_expression, 'cshp_pt_regenerate_composer_post_bulk_update', [], 'cshp_pt' );
 	} elseif ( ! wp_next_scheduled( 'cshp_pt_regenerate_composer_post_bulk_update' ) ) {
 		wp_schedule_event( $one_minute_later->getTimestamp(), 'daily', 'cshp_pt_regenerate_composer_post_bulk_update' );
 	}
