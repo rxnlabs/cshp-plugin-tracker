@@ -40,3 +40,6 @@ __MACOSX/
 ehthumbs.db
 Thumbs.db
 *.sql
+
+# Project specific ignores
+composer-vendor/bin

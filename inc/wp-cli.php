@@ -66,8 +66,8 @@ function wp_cli_commands( $args, $assoc_args ) {
 	if ( 'plugin-zip' === $command ) {
 		if ( false === $dry_run ) {
 			$result = Plugin_Tracker\zip_missing_plugins();
-			if ( Plugin_Tracker\get_missing_plugin_zip_file() === $result ) {
-				\WP_CLI::success( sprintf( esc_html__( 'Successfully generated premium plugins .zip at file path %s.', Plugin_Tracker\get_textdomain() ), Plugin_Tracker\get_missing_plugin_zip_file() ) );
+			if ( Plugin_Tracker\get_premium_plugin_zip_file() === $result ) {
+				\WP_CLI::success( sprintf( esc_html__( 'Successfully generated premium plugins .zip at file path %s.', Plugin_Tracker\get_textdomain() ), Plugin_Tracker\get_premium_plugin_zip_file() ) );
 			} else {
 				\WP_CLI::error( esc_html( $result ) );
 			}
@@ -85,8 +85,8 @@ function wp_cli_commands( $args, $assoc_args ) {
 	if ( 'theme-zip' === $command ) {
 		if ( false === $dry_run ) {
 			$result = Plugin_Tracker\zip_missing_themes();
-			if ( Plugin_Tracker\get_missing_theme_zip_file() === $result ) {
-				\WP_CLI::success( sprintf( esc_html__( 'Successfully generated premium themes .zip at file path %s.', Plugin_Tracker\get_textdomain() ), Plugin_Tracker\get_missing_theme_zip_file() ) );
+			if ( Plugin_Tracker\get_premium_theme_zip_file() === $result ) {
+				\WP_CLI::success( sprintf( esc_html__( 'Successfully generated premium themes .zip at file path %s.', Plugin_Tracker\get_textdomain() ), Plugin_Tracker\get_premium_theme_zip_file() ) );
 			} else {
 				\WP_CLI::error( esc_html( $result ) );
 			}
