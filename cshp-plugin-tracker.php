@@ -3,7 +3,7 @@
 Plugin Name: Cornershop Plugin Tracker
 Plugin URI: https://cornershopcreative.com/
 Description: Keep track of the current versions of themes and plugins installed on a WordPress site. This plugin should <strong>ALWAYS be Active</strong> unless you are having an issue where this plugin is the problem. If you are having issues with this plugin, please contact Cornershop Creative's support.
-Version: 1.0.11
+Version: 1.0.2
 Text Domain: cshp-pt
 Author: Cornershop Creative
 Author URI: https://cornershopcreative.com/
@@ -2747,7 +2747,8 @@ function generate_wordpress_wp_cli_install_command() {
  * Generating the markdown for showing the how to install the public themes using WP CLI
  *
  * @param array  $composer_json_required Composer JSON array of themes and plugins.
- * @param string $context The context that this command will be displayed. The default is markdown.
+ * @param string $context The context that this command will be displayed. The default is markdown. Options are
+ * command, raw, and markdown.
  *
  * @return string Markdown for the installing the themes with WP CLI.
  */
@@ -2759,12 +2760,17 @@ function generate_themes_wp_cli_install_command( $composer_json_required, $conte
 		$clean_name = str_replace( 'premium-theme/', '', str_replace( 'wpackagist-theme/', '', $theme_name ) );
 
 		if ( false !== strpos( $theme_name, 'wpackagist' ) ) {
-			$data[] = sprintf( 'wp theme install %s --version="%s" --force', $clean_name, $version );
+			$data[] = sprintf( 'wp theme install %s --version="%s" --force --skip-plugins --skip-themes', $clean_name, $version );
 		}
 	}
 
 	if ( ! empty( $data ) ) {
-		$install = $data = implode( ' && ', $data );
+		// return an array of WP_CLI commands that should be run
+		if ( 'command' === $context ) {
+			$install = $data;
+		} else {
+			$install = $data = implode( ' && ', $data );
+		}
 	} else {
 		$install = __( 'No public themes installed.', get_textdomain() );
 	}
@@ -3011,7 +3017,8 @@ function generate_plugins_markdown( $composer_json_required ) {
  * Generating the markdown for showing the how to install the public plugins using WP CLI
  *
  * @param array  $composer_json_required Composer JSON array of themes and plugins.
- * @param string $context The context that this command is used for. Default is for markdown.
+ * @param string $context The context that this command is used for. Default is for markdown. Options are
+ * command, raw, and markdown.
  *
  * @return string Markdown for the installing the plugins with WP CLI.
  */
@@ -3023,12 +3030,17 @@ function generate_plugins_wp_cli_install_command( $composer_json_required, $cont
 		$clean_name = str_replace( 'premium-plugin/', '', str_replace( 'wpackagist-plugin/', '', $plugin_name ) );
 
 		if ( false !== strpos( $plugin_name, 'wpackagist' ) ) {
-			$data[] = sprintf( 'wp plugin install %s --version="%s" --force', $clean_name, $version );
+			$data[] = sprintf( 'wp plugin install %s --version="%s" --force --skip-plugins --skip-themes', $clean_name, $version );
 		}
 	}
 
 	if ( ! empty( $data ) ) {
-		$install = $data = implode( ' && ', $data );
+        // return an array of WP_CLI commands that should be run
+		if ( 'command' === $context ) {
+			$install = $data;
+        } else {
+			$install = $data = implode( ' && ', $data );
+        }
 	} else {
 		$install = __( 'No public plugins installed.', get_textdomain() );
 	}
