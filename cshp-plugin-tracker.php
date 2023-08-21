@@ -3,7 +3,7 @@
 Plugin Name: Cornershop Plugin Tracker
 Plugin URI: https://cornershopcreative.com/
 Description: Keep track of the current versions of themes and plugins installed on a WordPress site. This plugin should <strong>ALWAYS be Active</strong> unless you are having an issue where this plugin is the problem. If you are having issues with this plugin, please contact Cornershop Creative's support.
-Version: 1.0.3
+Version: 1.0.31
 Text Domain: cshp-pt
 Author: Cornershop Creative
 Author URI: https://cornershopcreative.com/
@@ -3446,13 +3446,13 @@ function backup_premium_plugins() {
 		return $return_message;
 	}
 
-	if ( maybe_update_tracker_file() ) {
+	if ( maybe_update_tracker_file() || ! does_zip_exists( get_premium_plugin_zip_file() ) ) {
 		$result = zip_premium_plugins();
 
 		if ( ! does_zip_exists( $result ) ) {
 			$error_zip_file = true;
-		} else {
-			$generated_zip_file_during_command = true;
+			$return_message = esc_html__( 'Could not create a backup due to  error zipping premium plugins. Check plugin log.', get_textdomain() );
+			log_request( 'plugin_zip_backup_error', $return_message );
 		}
 	}
 
@@ -3484,6 +3484,7 @@ function backup_premium_plugins() {
 			[
 				'body'    => $form_fields,
 				'headers' => [ 'content-type' => 'multipart/form-data' ],
+                'timeout' => 12,
 			]
 		);
 
@@ -3492,11 +3493,6 @@ function backup_premium_plugins() {
 			 202 === wp_remote_retrieve_response_code( $request ) ) {
 			$return_message = sprintf( esc_html__( 'Successfully backed up plugin zip %s', get_textdomain() ), basename( get_premium_plugin_zip_file() ) );
 			$log_post       = log_request( 'plugin_zip_backup_complete', $return_message );
-			// if this premium plugins zip file was generated during this command, delete it so we don't have a zip file just lingering
-			if ( $generated_zip_file_during_command ) {
-				save_plugin_zip_file();
-				save_plugin_zip_file_contents();
-			}
 
 			if ( ! empty( $log_post ) && ! is_wp_error( $log_post ) ) {
 				update_post_meta( $log_post, '_plugins_backed_up', $plugin_content );
