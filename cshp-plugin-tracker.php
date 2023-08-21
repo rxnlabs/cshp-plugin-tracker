@@ -3,12 +3,12 @@
 Plugin Name: Cornershop Plugin Tracker
 Plugin URI: https://cornershopcreative.com/
 Description: Keep track of the current versions of themes and plugins installed on a WordPress site. This plugin should <strong>ALWAYS be Active</strong> unless you are having an issue where this plugin is the problem. If you are having issues with this plugin, please contact Cornershop Creative's support.
-Version: 1.0.2
+Version: 1.0.3
 Text Domain: cshp-pt
 Author: Cornershop Creative
 Author URI: https://cornershopcreative.com/
 License: GPLv2 or later
-Requires PHP: 5.6.20
+Requires PHP: 7.0.0
 */
 namespace Cshp\pt;
 
@@ -250,18 +250,10 @@ add_action( 'init', __NAMESPACE__ . '\add_cron_job' );
  * @return void
  */
 function plugin_update_checker() {
-	$update_url            = sprintf( 'https://plugins.demo.cshp.co/wp-json/cshp-plugin-updater/%s', get_this_plugin_folder() );
-	$is_update_url_blocked = false;
+	$update_url = sprintf( '%s/wp-json/cshp-plugin-updater/%s', get_plugin_update_url(), get_this_plugin_folder() );
 
 	// make sure the update will not be blocked before trying to update it
-	if ( defined( 'WP_HTTP_BLOCK_EXTERNAL' ) && true === WP_HTTP_BLOCK_EXTERNAL ) {
-		$url_parts             = wp_parse_url( $update_url );
-		$update_domain         = sprintf( '%s://%s', $url_parts['scheme'], $url_parts['host'] );
-		$check_host            = new \WP_Http();
-		$is_update_url_blocked = $check_host->block_request( $update_domain );
-	}
-
-	if ( ! $is_update_url_blocked && class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ) ) {
+	if ( ! is_external_domain_blocked( $update_url ) && class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ) ) {
 		\YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
 			$update_url,
 			__FILE__,
@@ -506,6 +498,15 @@ function get_this_plugin_slug() {
 }
 
 /**
+ * Get the URL where we can get the plugin updates since this plugin is not hosted on wordpress.org
+ *
+ * @return string URL to ping to get plugin updates.
+ */
+function get_plugin_update_url() {
+    return 'https://plugins.cornershopcreative.com';
+}
+
+/**
  * Get the path to the premium plugin download zip file.
  *
  * @return false|string|null Path of the zip file on the server or empty of no zip file.
@@ -530,7 +531,7 @@ function get_premium_theme_zip_file() {
  * zip file.
  */
 function get_premium_plugin_zip_file_contents() {
-	return get_option( 'cshp_plugin_tracker_plugin_zip_contents' );
+	return get_option( 'cshp_plugin_tracker_plugin_zip_contents', [] );
 }
 
 /**
@@ -540,7 +541,7 @@ function get_premium_plugin_zip_file_contents() {
  * zip file.
  */
 function get_premium_theme_zip_file_contents() {
-	return get_option( 'cshp_plugin_tracker_theme_zip_contents' );
+	return get_option( 'cshp_plugin_tracker_theme_zip_contents', [] );
 }
 
 /**
@@ -665,9 +666,18 @@ function generate_default_terms() {
 		'theme_activate'             => __( 'Theme Activate', get_textdomain() ),
 		'theme_deactivate'           => __( 'Theme Deactivate', get_textdomain() ),
 		'theme_uninstall'            => __( 'Theme Uninstall', get_textdomain() ),
+		'plugin_zip_backup_error'    => __( 'Plugin Zip Backup Error', get_textdomain() ),
+		'plugin_zip_backup_complete' => __( 'Plugin Zip Backup Complete', get_textdomain() ),
 	];
 
-	if ( ! wp_count_terms( get_log_taxonomy() ) ) {
+	$count_terms = wp_count_terms(
+		[
+			'taxonomy'   => get_log_taxonomy(),
+			'hide_empty' => false,
+		]
+	);
+
+	if ( ! is_wp_error( $count_terms ) && absint( $count_terms ) !== count( $terms ) ) {
 		foreach ( $terms as $slug => $name ) {
 			if ( term_exists( $slug, get_log_taxonomy() ) ) {
 				continue;
@@ -1034,14 +1044,7 @@ function is_update_disabled( $plugin_data ) {
  * @return bool
  */
 function is_wordpress_org_external_request_blocked() {
-	$is_wordpress_org_blocked = false;
-
-	if ( defined( 'WP_HTTP_BLOCK_EXTERNAL' ) && true === WP_HTTP_BLOCK_EXTERNAL ) {
-		$check_host               = new \WP_Http();
-		$is_wordpress_org_blocked = $check_host->block_request( 'https://api.wordpress.org' );
-	}
-
-	return $is_wordpress_org_blocked;
+	return is_external_domain_blocked( 'https://api.wordpress.org' );
 }
 
 /**
@@ -1099,21 +1102,22 @@ function create_plugin_tracker_file() {
  * @return void
  */
 function create_plugin_tracker_file_cron() {
-	$composer      = generate_composer_array();
-	$composer_file = read_plugins_file();
-
-	// only save the composer.json file if the requirements have changed from the last time the file was saved
-	if ( ! empty( $composer_file ) &&
-		 isset( $composer['require'] ) &&
-		 isset( $composer_file['require'] ) &&
-		 ! empty( array_diff_assoc( $composer['require'], $composer_file['require'] ) ) ) {
-		create_plugin_tracker_file();
-	} elseif ( empty( $composer_file ) ) {
+	if ( maybe_update_tracker_file() ) {
 		create_plugin_tracker_file();
 	}
 }
 add_action( 'cshp_pt_regenerate_composer_daily', __NAMESPACE__ . '\create_plugin_tracker_file_cron' );
 add_action( 'cshp_pt_regenerate_composer_post_bulk_update', __NAMESPACE__ . '\create_plugin_tracker_file_cron' );
+
+/**
+ * Backup the zip of the premium plugins during a cron job
+ *
+ * @return void
+ */
+function backup_premium_plugins_cron() {
+	backup_premium_plugins();
+}
+add_action( 'cshp_pt_regenerate_composer_daily', __NAMESPACE__ . '\backup_premium_plugins_cron' );
 
 /**
  * Update the composer file one-minute after some action. Usually after bulk plugin updates or bulk plugin installs.
@@ -1141,7 +1145,7 @@ function update_plugin_tracker_file_post_bulk_update() {
  *
  * @return array|null Key-value based array of the composer.json file, empty array if no composer.json file, or null.
  */
-function read_plugins_file() {
+function read_tracker_file() {
 	if ( is_wp_error( create_plugin_uploads_folder() ) || empty( create_plugin_uploads_folder() ) ) {
 		return;
 	}
@@ -1195,7 +1199,7 @@ function create_plugin_uploads_folder() {
  *
  * @return string Path of the saved zip file or an error message of the zip file cannot be created.
  */
-function create_zip( $zip_path, $folder_paths = [] ) {
+function create_zip( $zip_path, $folder_paths = [], $additional_files = [] ) {
 	if ( ! class_exists( '\ZipArchive' ) ) {
 		return __( 'Error: Ziparchive PHP class does not exist or the PHP zip module is not installed', get_textdomain() );
 	}
@@ -1226,6 +1230,17 @@ function create_zip( $zip_path, $folder_paths = [] ) {
 				$zip->addFile( $file->getRealPath(), $file_relative_path );
 			}
 		}//end foreach
+
+		if ( ! empty( $additional_files ) ) {
+			foreach ( $additional_files as $file_to_add ) {
+				if ( is_array( $file_to_add ) && isset( $file_to_add[0] ) && isset( $file_to_add[1] ) ) {
+					$zip->addFile( $file_to_add[0], $file_to_add[1] );
+				} else {
+					$zip->addFile( $file_to_add );
+				}
+			}
+		}
+
 		return $zip_path;
 	} else {
 		return __( 'Error: Zip cannot be created', get_textdomain() );
@@ -1236,9 +1251,11 @@ function create_zip( $zip_path, $folder_paths = [] ) {
 /**
  * Zip up the plugins that are not available on wordpress.org
  *
+ * @param string $zip_name File name of the plugins .zip file.
+ *
  * @return string Path to the premium plugins zip file or error message if the zip file cannot be created.
  */
-function zip_missing_plugins() {
+function zip_premium_plugins( $zip_name = '' ) {
 	$plugins                   = get_active_plugins();
 	$excluded_plugins          = get_excluded_plugins();
 	$message                   = '';
@@ -1264,7 +1281,17 @@ function zip_missing_plugins() {
 		}
 
 		if ( ! is_wp_error( create_plugin_uploads_folder() ) && ! empty( create_plugin_uploads_folder() ) ) {
-			$zip_path = sprintf( '%s/plugins-%s.zip', create_plugin_uploads_folder(), wp_generate_uuid4() );
+			$generate_zip_name = sprintf( 'plugins-%s.zip', wp_generate_uuid4() );
+
+			if ( empty( $zip_name ) || ! is_string( $zip_name ) ) {
+				$zip_name = $generate_zip_name;
+			}
+
+			if ( '.zip' !== substr( $zip_name, -4 ) ) {
+				$zip_name .= '.zip';
+			}
+
+			$zip_path = sprintf( '%s/%s', create_plugin_uploads_folder(), $zip_name );
 			log_request( 'plugin_zip_start' );
 			foreach ( $plugins as $plugin ) {
 				$plugin_folder_name      = dirname( $plugin );
@@ -1285,8 +1312,20 @@ function zip_missing_plugins() {
 				}
 			}//end foreach
 
+			if ( empty( $zip_include_plugins ) ) {
+				$message = __( 'No premium plugins are active on the site. If there are premium plugins, they may be excluded from downloading by the plugin settings.', get_textdomain() );
+			}
+
 			if ( ! empty( $zip_include_plugins ) ) {
-				$zip_result = create_zip( $zip_path, $zip_include_plugins );
+				$additional_files = [];
+				// include a main plugin file in the zip so we can install the premium plugins
+				$plugin_file = sprintf( '%s/scaffold/cshp-premium-plugins.php', __DIR__ );
+				if ( file_exists( $plugin_file ) ) {
+					// add the plugin file to the root of the zip file rather than as the entire path of the file
+					$additional_files[] = [ $plugin_file, basename( $plugin_file ) ];
+				}
+
+				$zip_result = create_zip( $zip_path, $zip_include_plugins, $additional_files );
 				if ( file_exists( $zip_result ) ) {
 					// generate the composer tracker file just in case it has not been updated since before the tracker
 					// file was created
@@ -1298,6 +1337,8 @@ function zip_missing_plugins() {
 						}
 					}
 
+					ksort( $plugin_zip_contents );
+
 					save_plugin_zip_file_contents( $plugin_zip_contents );
 					log_request( 'plugin_zip_create_complete' );
 					log_request( 'plugin_zip_download' );
@@ -1305,7 +1346,7 @@ function zip_missing_plugins() {
 				} else {
 					$message = $zip_result;
 					log_request( 'plugin_zip_error', $message );
-				}
+				}//end if
 			}//end if
 		} else {
 			$message = __( 'Error: Ziparchive PHP class does not exist or the PHP zip module is not installed', get_textdomain() );
@@ -1322,9 +1363,11 @@ function zip_missing_plugins() {
 /**
  * Zip up the themes that are not available on wordpress.org
  *
+ * @param string $zip_name File name of the themes .zip file.
+ *
  * @return string Path to the premium themes zip file or error message if the zip file cannot be created.
  */
-function zip_missing_themes() {
+function zip_premium_themes( $zip_name = '' ) {
 	$themes                   = get_active_themes();
 	$excluded_themes          = get_excluded_themes();
 	$zip_include_themes       = [];
@@ -1333,13 +1376,12 @@ function zip_missing_themes() {
 	$saved_themes_list        = [];
 	$theme_zip_contents       = [];
 
-	foreach ( generate_composer_installed_plugins() as $theme_folder_name => $theme_version ) {
+	foreach ( generate_composer_installed_themes() as $theme_folder_name => $theme_version ) {
 		$clean_folder_name                              = str_replace( [ 'premium-theme/', 'wpackagist-theme/' ], '', $theme_folder_name );
 		$theme_composer_data_list[ $clean_folder_name ] = $theme_version;
 	}
 
 	if ( class_exists( '\ZipArchive' ) ) {
-
 		// if we are using WP CLI, allow the zip of themes to be generated multiple times
 		if ( ! is_wp_cli_environment() ) {
 			if ( does_zip_exists( get_premium_theme_zip_file() ) && ! is_theme_zip_old() ) {
@@ -1352,7 +1394,17 @@ function zip_missing_themes() {
 		}
 
 		if ( ! is_wp_error( create_plugin_uploads_folder() ) && ! empty( create_plugin_uploads_folder() ) ) {
-			$zip_path = sprintf( '%s/themes-%s.zip', create_plugin_uploads_folder(), wp_generate_uuid4() );
+			$generate_zip_name = sprintf( 'themes-%s.zip', wp_generate_uuid4() );
+
+			if ( empty( $zip_name ) || ! is_string( $zip_name ) ) {
+				$zip_name = $generate_zip_name;
+			}
+
+			if ( '.zip' !== substr( $zip_name, -4 ) ) {
+				$zip_name .= '.zip';
+			}
+
+			$zip_path = sprintf( '%s/%s', create_plugin_uploads_folder(), $zip_name );
 			log_request( 'theme_zip_start' );
 			foreach ( $themes as $theme_folder_name ) {
 				$theme = wp_get_theme( $theme_folder_name );
@@ -1368,8 +1420,35 @@ function zip_missing_themes() {
 				$theme_zip_contents[] = $theme_folder_name;
 			}//end foreach
 
+			if ( empty( $zip_include_themes ) ) {
+				$message = __( 'No premium themes are active on the site. If there are premium themes, they may be excluded from downloading by the plugin settings.', get_textdomain() );
+			}
+
 			if ( ! empty( $zip_include_themes ) ) {
-				$zip_result = create_zip( $zip_path, $zip_include_themes );
+				$additional_files = [];
+				// include a main style.css file in the zip so we can install the premium themes
+				$style_css_file = sprintf( '%s/scaffold/style.css', __DIR__ );
+				if ( file_exists( $style_css_file ) ) {
+					// add the style.css file to the root of the zip file rather than as the entire path of the file
+					$additional_files[] = [ $style_css_file, basename( $style_css_file ) ];
+				}
+
+				// include a main index.php file in the zip so we can install the premium themes
+				$index_php_file = sprintf( '%s/scaffold/index.php', __DIR__ );
+				if ( file_exists( $index_php_file ) ) {
+					// add the index.php file to the root of the zip file rather than as the entire path of the file
+					$additional_files[] = [ $index_php_file, basename( $index_php_file ) ];
+				}
+
+				// include another CSS file in the zip so we can identify the premium themes folder
+				// based on a unique file name
+				$premium_themes_css_file = sprintf( '%s/scaffold/cshp-premium-themes.css', __DIR__ );
+				if ( file_exists( $premium_themes_css_file ) ) {
+					// add the style.css file to the root of the zip file rather than as the entire path of the file
+					$additional_files[] = [ $premium_themes_css_file, basename( $premium_themes_css_file ) ];
+				}
+
+				$zip_result = create_zip( $zip_path, $zip_include_themes, $additional_files );
 				if ( file_exists( $zip_result ) ) {
 					// generate the composer tracker file just in case it has not been updated since before the tracker
 					// file was created
@@ -1484,7 +1563,8 @@ function download_plugin_zip_rest( $request ) {
 		log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
 		return new \WP_REST_Response(
 			[
-				'error' => __( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() ),
+				'error'   => true,
+				'message' => esc_html__( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() ),
 			],
 			403
 		);
@@ -1494,21 +1574,28 @@ function download_plugin_zip_rest( $request ) {
 		log_request( 'token_verify_fail' );
 		return new \WP_REST_Response(
 			[
-				'error' => __( 'Token is not authorized', get_textdomain() ),
+				'error'   => true,
+				'message' => esc_html__( 'Token is not authorized', get_textdomain() ),
 			],
 			403
 		);
 	}
 
-	$zip_file_result = zip_missing_plugins();
+	$zip_file_result = zip_premium_plugins();
 	if ( $zip_file_result === get_premium_plugin_zip_file() && does_zip_exists( get_premium_plugin_zip_file() ) ) {
-		send_missing_plugins_zip_for_download();
+		send_premium_plugins_zip_for_download();
+	}
+
+	$message = __( 'Plugin zip file does not exist or cannot be generated', get_textdomain() );
+
+	if ( is_string( $zip_file_result ) && ! empty( $zip_file_result ) ) {
+		$message = $zip_file_result;
 	}
 
 	return new \WP_REST_Response(
 		[
-			'error'   => $zip_file_result,
-			'message' => __( 'Plugin zip file does not exist or cannot be generated', get_textdomain() ),
+			'error'   => true,
+			'message' => esc_html( $message ),
 		],
 		410
 	);
@@ -1529,7 +1616,8 @@ function download_theme_zip_rest( $request ) {
 		log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
 		return new \WP_REST_Response(
 			[
-				'error' => __( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() ),
+				'error'   => true,
+				'message' => esc_html__( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() ),
 			],
 			403
 		);
@@ -1539,22 +1627,29 @@ function download_theme_zip_rest( $request ) {
 		log_request( 'token_verify_fail' );
 		return new \WP_REST_Response(
 			[
-				'error' => __( 'Token is not authorized', get_textdomain() ),
+				'error'   => true,
+				'message' => esc_html__( 'Token is not authorized', get_textdomain() ),
 			],
 			403
 		);
 	}
 
-	$zip_file_result = zip_missing_themes();
+	$zip_file_result = zip_premium_themes();
 
 	if ( $zip_file_result === get_premium_theme_zip_file() && does_zip_exists( get_premium_theme_zip_file() ) ) {
-		send_missing_themes_zip_for_download();
+		send_premium_themes_zip_for_download();
+	}
+
+	$message = __( 'Theme zip file does not exist or cannot be generated', get_textdomain() );
+
+	if ( is_string( $zip_file_result ) && ! empty( $zip_file_result ) ) {
+		$message = $zip_file_result;
 	}
 
 	return new \WP_REST_Response(
 		[
-			'error'   => $zip_file_result,
-			'message' => __( 'Theme zip file does not exist or cannot be generated', get_textdomain() ),
+			'error'   => true,
+			'message' => esc_html( $message ),
 		],
 		410
 	);
@@ -1589,10 +1684,10 @@ function download_plugin_zip_rewrite( &$query ) {
 			exit;
 		}
 
-		$zip_file_result = zip_missing_plugins();
+		$zip_file_result = zip_premium_plugins();
 
 		if ( $zip_file_result === get_premium_plugin_zip_file() && does_zip_exists( get_premium_plugin_zip_file() ) ) {
-			send_missing_plugins_zip_for_download();
+			send_premium_plugins_zip_for_download();
 		}
 
 		http_response_code( 410 );
@@ -1620,7 +1715,7 @@ function download_theme_zip_rewrite( &$query ) {
 		if ( empty( $passed_token ) ) {
 			http_response_code( 403 );
 			log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
-            esc_html_e( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() );
+			esc_html_e( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() );
 			exit;
 		}
 
@@ -1631,10 +1726,10 @@ function download_theme_zip_rewrite( &$query ) {
 			exit;
 		}
 
-		$zip_file_result = zip_missing_themes();
+		$zip_file_result = zip_premium_themes();
 
 		if ( $zip_file_result === get_premium_theme_zip_file() && does_zip_exists( get_premium_theme_zip_file() ) ) {
-			send_missing_themes_zip_for_download();
+			send_premium_themes_zip_for_download();
 		}
 
 		http_response_code( 410 );
@@ -1649,7 +1744,7 @@ add_action( 'parse_request', __NAMESPACE__ . '\download_theme_zip_rewrite', 9999
  *
  * @return void
  */
-function send_missing_plugins_zip_for_download() {
+function send_premium_plugins_zip_for_download() {
 	http_response_code( 302 );
 	header( 'Cache-Control: no-store, no-cache, must-revalidate' );
 	header( 'Cache-Control: post-check=0, pre-check=0', false );
@@ -1664,7 +1759,7 @@ function send_missing_plugins_zip_for_download() {
  *
  * @return void
  */
-function send_missing_themes_zip_for_download() {
+function send_premium_themes_zip_for_download() {
 	http_response_code( 302 );
 	header( 'Cache-Control: no-store, no-cache, must-revalidate' );
 	header( 'Cache-Control: post-check=0, pre-check=0', false );
@@ -1809,11 +1904,12 @@ function is_theme_zip_old() {
  * @param string $type Type of message to log. Should be slug of the log custom taxonomy.
  * @param string $message Custom message to override the default message.
  *
- * @return void
+ * @return int Post ID of the log post
  */
 function log_request( $type, $message = '' ) {
 	global $wp;
-	$get_clean = [];
+	$get_clean      = [];
+	$result_post_id = 0;
 
 	if ( ! empty( $_GET ) ) {
 		foreach ( $_GET as $key => $get ) {
@@ -1884,7 +1980,7 @@ function log_request( $type, $message = '' ) {
 			[
 				'post_type'    => get_log_post_type(),
 				'post_title'   => $title,
-				'post_content' => $content,
+				'post_content' => wp_kses_post( $content ),
 				'post_status'  => 'private',
 				'post_author'  => is_user_logged_in() ? get_current_user_id() : 0,
 				'tax_input'    => [
@@ -1904,6 +2000,8 @@ function log_request( $type, $message = '' ) {
 			wp_add_object_terms( $result_post_id, $term_object->term_id, $term_object->taxonomy );
 		}
 	}//end if
+
+	return $result_post_id;
 }
 
 /**
@@ -2042,7 +2140,7 @@ function get_request_geolocation() {
  *
  * @return void
  */
-function save_plugin_zip_file( $zip_file_path ) {
+function save_plugin_zip_file( $zip_file_path = '' ) {
 	$previous_zip = get_premium_plugin_zip_file();
 
 	if ( ! empty( $previous_zip ) ) {
@@ -2063,11 +2161,11 @@ function save_plugin_zip_file( $zip_file_path ) {
  *
  * @return void
  */
-function save_theme_zip_file( $zip_file_path ) {
+function save_theme_zip_file( $zip_file_path = '' ) {
 	$previous_zip = get_premium_theme_zip_file();
 
 	if ( ! empty( $previous_zip ) ) {
-		unlink( $previous_zip );
+		wp_delete_file( $previous_zip );
 	}
 
 	if ( does_zip_exists( $zip_file_path ) ) {
@@ -2085,7 +2183,7 @@ function save_theme_zip_file( $zip_file_path ) {
  *
  * @return void
  */
-function save_plugin_zip_file_contents( $plugin_content_data ) {
+function save_plugin_zip_file_contents( $plugin_content_data = '' ) {
 	if ( does_zip_exists( get_premium_plugin_zip_file() ) ) {
 		update_option( 'cshp_plugin_tracker_plugin_zip_contents', $plugin_content_data );
 	} else {
@@ -2101,7 +2199,7 @@ function save_plugin_zip_file_contents( $plugin_content_data ) {
  *
  * @return void
  */
-function save_theme_zip_file_contents( $theme_content_data ) {
+function save_theme_zip_file_contents( $theme_content_data = '' ) {
 	if ( does_zip_exists( get_premium_theme_zip_file() ) ) {
 		update_option( 'cshp_plugin_tracker_theme_zip_contents', $theme_content_data );
 	} else {
@@ -2129,6 +2227,11 @@ function add_options_admin_menu() {
 }
 add_action( 'admin_menu', __NAMESPACE__ . '\add_options_admin_menu' );
 
+/**
+ * Add a link to the plugin settings page on the plugins table view list
+ *
+ * @return void
+ */
 function add_settings_link() {
 	$filter_name = sprintf( 'plugin_action_links_%s', plugin_basename( __FILE__ ) );
 
@@ -2416,17 +2519,31 @@ function admin_page_settings_tab() {
 					</td>
 				</tr>
 				<tr>
-					<th scope="row"><label for="cshp-wp-cli-plugin-install-command"><?php esc_html_e( 'WP CLI command to install plugins', get_textdomain() ); ?></label></th>
+					<th scope="row"><label for="cshp-wp-cli-plugin-install-command"><?php esc_html_e( 'WP CLI command to install wordpress.org plugins', get_textdomain() ); ?></label></th>
 					<td>
 						<textarea id="cshp-wp-cli-plugin-install-command" disabled class="regular-text"><?php echo generate_plugins_wp_cli_install_command( generate_composer_installed_plugins(), 'raw' ); ?></textarea>
 						<button type="button" id="cshp-wp-cli-plugins-command" data-copy="cshp-wp-cli-plugin-install-command" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
 					</td>
 				</tr>
 				<tr>
-					<th scope="row"><label for="cshp-wp-cli-theme-install-command"><?php esc_html_e( 'WP CLI command to install themes', get_textdomain() ); ?></label></th>
+					<th scope="row"><label for="cshp-wp-cli-premium-plugins-download"><?php esc_html_e( 'WP CLI command to install premium plugins', get_textdomain() ); ?></label></th>
+					<td>
+						<input disabled type="text" id="cshp-wp-cli-premium-plugins-download" class="large-text" value="<?php echo esc_attr( generate_premium_plugins_wp_cli_install_command( 'raw' ) ); ?>"/>
+						<button type="button" id="cshp-tracker-wp-cli-premium-plugins-download" data-copy="cshp-wp-cli-premium-plugins-download" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="cshp-wp-cli-theme-install-command"><?php esc_html_e( 'WP CLI command to install wordpress.org themes', get_textdomain() ); ?></label></th>
 					<td>
 						<textarea id="cshp-wp-cli-theme-install-command" disabled class="regular-text"><?php echo generate_themes_wp_cli_install_command( generate_composer_installed_themes(), 'raw' ); ?></textarea>
 						<button type="button" id="cshp-wp-cli-themes-command" data-copy="cshp-wp-cli-plugin-install-command" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="cshp-wp-cli-premium-themes-download"><?php esc_html_e( 'WP CLI command to install premium themes', get_textdomain() ); ?></label></th>
+					<td>
+						<input disabled type="text" id="cshp-wp-cli-premium-themes-download" class="large-text" value="<?php echo esc_attr( generate_premium_themes_wp_cli_install_command( 'raw' ) ); ?>"/>
+						<button type="button" id="cshp-tracker-wp-cli-premium-themes-download" data-copy="cshp-wp-cli-premium-themes-download" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
 					</td>
 				</tr>
 				<tr>
@@ -2756,10 +2873,14 @@ function generate_themes_wp_cli_install_command( $composer_json_required, $conte
 	$data    = [];
 	$install = '';
 
+	if ( is_array( $composer_json_required ) && isset( $composer_json_required['require'] ) ) {
+		$composer_json_required = $composer_json_required['require'];
+	}
+
 	foreach ( $composer_json_required as $theme_name => $version ) {
 		$clean_name = str_replace( 'premium-theme/', '', str_replace( 'wpackagist-theme/', '', $theme_name ) );
 
-		if ( false !== strpos( $theme_name, 'wpackagist' ) ) {
+		if ( false !== strpos( $theme_name, 'wpackagist-theme' ) ) {
 			$data[] = sprintf( 'wp theme install %s --version="%s" --force --skip-plugins --skip-themes', $clean_name, $version );
 		}
 	}
@@ -2818,6 +2939,28 @@ function generate_themes_zip_command( $composer_json_required ) {
 		__( 'Use command to zip premium themes if the .zip file cannot be created or downloaded', get_textdomain() ),
 		$data
 	);
+}
+
+/**
+ * Generating the markdown for showing the WP CLI command to download and install the premium themes.
+ *
+ * @param string $context The context that this command will be displayed. Default is Markdown.
+ *
+ * @return string Markdown for downloading and install the premium themes with WP CLI.
+ */
+function generate_premium_themes_wp_cli_install_command( $context = 'markdown' ) {
+	$command = sprintf( 'wp cshp-pt theme-install %s --force', esc_url( get_api_theme_downloads_endpoint() ) );
+
+	if ( 'markdown' === $context ) {
+		return sprintf(
+			'## WP CLI command to downlaod and install Premium Themes %1$s%2$s%1$s`%3$s`',
+			PHP_EOL,
+			__( 'Use command to download and install the premium themes', get_textdomain() ),
+			$command
+		);
+	}
+
+	return $command;
 }
 
 /**
@@ -3026,21 +3169,25 @@ function generate_plugins_wp_cli_install_command( $composer_json_required, $cont
 	$data    = [];
 	$install = '';
 
+	if ( is_array( $composer_json_required ) && isset( $composer_json_required['require'] ) ) {
+		$composer_json_required = $composer_json_required['require'];
+	}
+
 	foreach ( $composer_json_required as $plugin_name => $version ) {
 		$clean_name = str_replace( 'premium-plugin/', '', str_replace( 'wpackagist-plugin/', '', $plugin_name ) );
 
-		if ( false !== strpos( $plugin_name, 'wpackagist' ) ) {
+		if ( false !== strpos( $plugin_name, 'wpackagist-plugin' ) ) {
 			$data[] = sprintf( 'wp plugin install %s --version="%s" --force --skip-plugins --skip-themes', $clean_name, $version );
 		}
 	}
 
 	if ( ! empty( $data ) ) {
-        // return an array of WP_CLI commands that should be run
+		// return an array of WP_CLI commands that should be run
 		if ( 'command' === $context ) {
 			$install = $data;
-        } else {
+		} else {
 			$install = $data = implode( ' && ', $data );
-        }
+		}
 	} else {
 		$install = __( 'No public plugins installed.', get_textdomain() );
 	}
@@ -3088,6 +3235,28 @@ function generate_plugins_zip_command( $composer_json_required ) {
 		__( 'Use command to zip premium plugins if the .zip file cannot be created or downloaded', get_textdomain() ),
 		$data
 	);
+}
+
+/**
+ * Generating the markdown for showing the WP CLI command to download and install the premium plugins.
+ *
+ * @param string $context The context that this command will be displayed. Default is Markdown.
+ *
+ * @return string Markdown for downloading and install the premium plugins with WP CLI.
+ */
+function generate_premium_plugins_wp_cli_install_command( $context = 'markdown' ) {
+	$command = sprintf( 'wp cshp-pt plugin-install %s --force', esc_url( get_api_active_plugin_downloads_endpoint() ) );
+
+	if ( 'markdown' === $context ) {
+		return sprintf(
+			'## WP CLI command to downlaod and install Premium Plugins %1$s%2$s%1$s`%3$s`',
+			PHP_EOL,
+			__( 'Use command to download and install the premium plugins', get_textdomain() ),
+			$command
+		);
+	}
+
+	return $command;
 }
 
 /**
@@ -3180,7 +3349,7 @@ function get_plugin_file_uri( $file ) {
 	$url = null;
 	if ( empty( $file ) ) {
 		$url = plugin_dir_url( __FILE__ );
-	} elseif ( does_zip_exists( plugin_dir_path( __FILE__ ) . '/' . $file ) ) {
+	} elseif ( file_exists( plugin_dir_path( __FILE__ ) . '/' . $file ) ) {
 		$url = plugin_dir_url( __FILE__ ) . $file;
 	}
 
@@ -3188,15 +3357,393 @@ function get_plugin_file_uri( $file ) {
 }
 
 /**
- * Get the full path to a plugin file
+ * Determine if the tracker file should be regenerated based on if WP core, plugins, or themes have changed.
  *
- * WordPress has no built-in way to get the full path to a plugin's main file when getting a list of plugins from the site.
- *
- * @param string $plugin_folder_name_and_main_file Plugin folder and main file (e.g. cshp-plugin-tracker/cshp-plugin-tracker.php).
- *
- * @return string Absolute path to a plugin file.
+ * @return bool True if the tracker file should update based on some change. False otherwise.
  */
-function get_plugin_file_full_path( $plugin_folder_name_and_main_file ) {
+function maybe_update_tracker_file() {
+	$composer      = generate_composer_array();
+	$composer_file = read_tracker_file();
+
+	// only save the composer.json file if the requirements have changed from the last time the file was saved
+	if ( empty( $composer_file ) || ( isset( $composer['require'] ) &&
+		 isset( $composer_file['require'] ) &&
+		 ! empty( array_diff_assoc( $composer['require'], $composer_file['require'] ) ) ) ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Back up the premium plugins zip to a dedicated backup retrieval site.
+ *
+ * Useful for retrieving the old versions of premium plugins that are on sites if these plugins are not in Git
+ * and the plugin sites don't let you download old versions (e.g. Gravity Forms)
+ *
+ * @return bool|string True if the premium zip file was backed up successfully. Error message if the zip could not be backed up.
+ */
+function backup_premium_plugins() {
+	$return_message                    = '';
+	$plugin_content_compare            = [];
+	$generated_zip_file_during_command = false;
+	$error_zip_file                    = false;
+	$backup_url                        = sprintf( '%s/wp-json/cshp-plugin-backup/backup', get_plugin_update_url() );
+	$plugin_content                    = generate_composer_installed_plugins();
+	$excluded_plugins                  = get_excluded_plugins();
+
+	if ( ! function_exists( '\curl_init' ) || is_development_mode() ) {
+
+		$return_message = esc_html__( 'Can only backup plugins on sites with: cURL installed, in production mode, and not in a known development environment.', get_textdomain() );
+
+		// flag if the site is in production mode but the Kinsta dev environment constant is set
+		if ( defined( 'KINSTA_DEV_ENV' ) &&
+			 true === KINSTA_DEV_ENV &&
+			 'production' === wp_get_environment_type() ) {
+			$return_message = esc_html__( 'Error backing up plugin zip: Website is in production mode but the KINSTA_DEV_ENV flag is on. Turn off the KINSTA_DEV_ENV flag.', get_textdomain() );
+			log_request( 'plugin_zip_backup_error', $return_message );
+		}
+
+		return $return_message;
+	}
+
+	foreach ( $plugin_content as $plugin_key => $version ) {
+		if ( false === strpos( $plugin_key, 'premium-plugin' ) ) {
+			continue;
+		}
+
+		$plugin_folder_name = str_replace( 'premium-plugin/', '', $plugin_key );
+
+		// prevent this plugin from being included in the premium plugins zip file
+		// exclude plugins that we explicitly don't want to download
+		// if the plugin should not download when we create the zip, don't back it up
+		if ( $plugin_folder_name === get_this_plugin_folder() || in_array( $plugin_folder_name, $excluded_plugins, true ) ) {
+			continue;
+		}
+
+		$plugin_content_compare[ $plugin_folder_name ] = $version;
+	}
+
+	ksort( $plugin_content_compare );
+
+	if ( is_external_domain_blocked( $backup_url ) ) {
+		$return_message = esc_html__( 'Plugin zip backup site is blocked by WP_HTTP_BLOCK_EXTERNAL', get_textdomain() );
+		log_request( 'plugin_zip_backup_error', $return_message );
+		return $return_message;
+	}
+
+	// If this combination of premium plugins have already been backed up before,
+	if ( has_premium_plugins_version_backed_up( $plugin_content_compare ) ) {
+		$return_message = esc_html__( 'This version of the premium plugins have already been backed up. You can only backup a unique combination of plugins.', get_textdomain() );
+		log_request( 'plugin_zip_backup_error', $return_message );
+		return $return_message;
+	}
+
+	// If the premium plugins have already been backed up today, don't try to back up again.
+	if ( has_premium_plugins_backed_up_today() ) {
+		$return_message = esc_html__( 'Premium plugins already backed up today. Can only back up once a day.', get_textdomain() );
+		log_request( 'plugin_zip_backup_error', $return_message );
+		return $return_message;
+	}
+
+	if ( maybe_update_tracker_file() ) {
+		$result = zip_premium_plugins();
+
+		if ( ! does_zip_exists( $result ) ) {
+			$error_zip_file = true;
+		} else {
+			$generated_zip_file_during_command = true;
+		}
+	}
+
+	if ( ! $error_zip_file && ! empty( get_premium_plugin_zip_file() ) ) {
+		$plugin_content       = wp_json_encode( get_premium_plugin_zip_file_contents() );
+		$home_url             = home_url( '/' );
+		$domain               = wp_parse_url( $home_url );
+		$zip_file_upload_name = sprintf( '%s.zip', sanitize_title( sprintf( '%s/%s', $domain['host'], $domain['path'] ) ) );
+		$curl_file            = new \CurlFile( get_premium_plugin_zip_file() );
+		$curl_file->setPostFilename( $zip_file_upload_name );
+		$form_fields = [
+			'domain'                  => $home_url,
+			'premium_plugin_zip_file' => $curl_file,
+			'plugins'                 => $plugin_content,
+		];
+
+		// Use an anonymous function and pass the local variable that we want to post to that function since
+		// the http_api_curl hook does not pass the data that we actually want to POST with the hook
+		$file_upload_request = function( $handle_or_parameters, $request = '', $url = '' ) use ( $form_fields ) {
+			update_wp_http_request( $handle_or_parameters, $form_fields );
+		};
+		// handle cURL requests if we have cURL installed
+		add_action( 'http_api_curl', $file_upload_request, 10 );
+		// handle fsockopen requests if we don't have cURL installed
+		add_action( 'requests-fsockopen.before_send', $file_upload_request, 10, 3 );
+
+		$request = wp_remote_post(
+			$backup_url,
+			[
+				'body'    => $form_fields,
+				'headers' => [ 'content-type' => 'multipart/form-data' ],
+			]
+		);
+
+		if ( 200 === wp_remote_retrieve_response_code( $request ) ||
+			 201 === wp_remote_retrieve_response_code( $request ) ||
+			 202 === wp_remote_retrieve_response_code( $request ) ) {
+			$return_message = sprintf( esc_html__( 'Successfully backed up plugin zip %s', get_textdomain() ), basename( get_premium_plugin_zip_file() ) );
+			$log_post       = log_request( 'plugin_zip_backup_complete', $return_message );
+			// if this premium plugins zip file was generated during this command, delete it so we don't have a zip file just lingering
+			if ( $generated_zip_file_during_command ) {
+				save_plugin_zip_file();
+				save_plugin_zip_file_contents();
+			}
+
+			if ( ! empty( $log_post ) && ! is_wp_error( $log_post ) ) {
+				update_post_meta( $log_post, '_plugins_backed_up', $plugin_content );
+			}
+		} else {
+			$result = wp_remote_retrieve_body( $request );
+			// If we received ane empty error message from the server, then we may be blocked
+			if ( empty( $result ) ) {
+				$result = __( 'Empty error message returned from back up site. This site may be blocked by the backup site\'s server.', get_textdomain() );
+			}
+
+			$return_message = sprintf( esc_html__( 'Error backing up plugin zip %1$s: %2$s', get_textdomain() ), basename( get_premium_plugin_zip_file() ), $result );
+			log_request( 'plugin_zip_backup_error', $return_message );
+		}//end if
+	}//end if
+
+	return ! empty( $return_message ) ? $return_message : true;
+}
+
+/**
+ * Update the WP cURL and fsockopen requests to make them work with file uploads.
+ *
+ * @param resource|array $handle_or_parameters cURL handle or fsockopen parameters. This is passed by reference.
+ * @param array          $form_body_arguments Form data to POST to the remote service.
+ * @param string         $url The URL that the cURL or fsockopen request is being made to.
+ *
+ * @return void
+ */
+function update_wp_http_request( &$handle_or_parameters, $form_body_arguments = '', $url = '' ) {
+	if ( function_exists( '\curl_init' ) && function_exists( '\curl_exec' ) ) {
+		foreach ( $form_body_arguments as $value ) {
+			// Only do this if we are using PHP 5.5+ CURLFile file to upload a file
+			if ( 'object' === gettype( $value ) && $value instanceof \CURLFile ) {
+				/*
+				Use the request body as an array to force cURL make a requests using 'multipart/form-data'
+				as the Content-type header instead of WP's default habit of converting the request to
+				a string using http_build_query function
+				*/
+				curl_setopt( $handle_or_parameters, CURLOPT_POSTFIELDS, $form_body_arguments );
+				break;
+			}
+		}
+	} elseif ( function_exists( '\fsockopen' ) ) {
+		// UNTESTED SINCE I HAVE cURL INSTALLED AND CANNOT TEST THIS
+		$form_fields = [];
+		$form_files  = [];
+		foreach ( $form_body_arguments as $name => $value ) {
+			if ( file_exists( $value ) ) {
+				// Not great for large files since it dumps into memory but works well for small files
+				$form_files[ $name ] = file_get_contents( $value );
+			} else {
+				$form_fields[ $name ] = $value;
+			}
+		}
+
+		/**
+		 * Convert form fields arrays to a string that fsockopen requests can understand
+		 *
+		 * @see https://gist.github.com/maxivak/18fcac476a2f4ea02e5f80b303811d5f
+		 */
+		function build_data_files( $boundary, $fields, $files ) {
+			$data = '';
+			$eol  = "\r\n";
+
+			$delimiter = '-------------' . $boundary;
+
+			foreach ( $fields as $name => $content ) {
+				$data .= '--' . $delimiter . $eol
+						 . 'Content-Disposition: form-data; name="' . $name . '"' . $eol . $eol
+						 . $content . $eol;
+			}
+
+			foreach ( $files as $name => $content ) {
+				$data .= '--' . $delimiter . $eol
+						 . 'Content-Disposition: form-data; name="' . $name . '"; filename="' . $name . '"' . $eol
+						 // . 'Content-Type: image/png'.$eol
+						 . 'Content-Transfer-Encoding: binary' . $eol;
+
+				$data .= $eol;
+				$data .= $content . $eol;
+			}
+			$data .= '--' . $delimiter . '--' . $eol;
+
+			return $data;
+		}
+		$boundary             = uniqid();
+		$handle_or_parameters = build_data_files( $boundary, $form_fields, $form_files );
+	}//end if
+}
+
+/**
+ * Check if the premium plugins zip have already been backed up today.
+ *
+ * @return bool True if the premium plugins have been successfully backed up today. False if there was no successful backup.
+ */
+function has_premium_plugins_backed_up_today() {
+	$today                        = current_datetime();
+	$check_plugins_uploaded_today = new \WP_Query(
+		[
+			'post_type'              => get_log_post_type(),
+			'post_status'            => 'private',
+			'tax_query'              => [
+				[
+					'taxonomy' => get_log_taxonomy(),
+					'field'    => 'slug',
+					'terms'    => 'plugin_zip_backup_complete',
+				],
+			],
+			'date_query'             => [
+				[
+					'year'  => $today->format( 'Y' ),
+					'month' => $today->format( 'm' ),
+					'day'   => $today->format( 'd' ),
+				],
+			],
+			'posts_per_page'         => 1,
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+			'fields'                 => 'ids',
+		]
+	);
+
+	wp_reset_query();
+
+	if ( ! is_wp_error( $check_plugins_uploaded_today ) ) {
+		return ! empty( $check_plugins_uploaded_today->posts );
+	}
+
+	return false;
+}
+
+/**
+ * Check if this version of the premium plugins have already been backed up.
+ *
+ * @param array $premium_plugins_list Associative array of plugins and versions that we are preparing for a backup.
+ *
+ * @return bool True if this version of the plugins zip has already been backed up.
+ */
+function has_premium_plugins_version_backed_up( $premium_plugins_list ) {
+	if ( is_array( $premium_plugins_list ) || is_object( $premium_plugins_list ) ) {
+		$premium_plugins_list = wp_json_encode( $premium_plugins_list );
+	}
+
+	$check_plugins_backed_up_before = new \WP_Query(
+		[
+			'post_type'              => get_log_post_type(),
+			'post_status'            => 'private',
+			'tax_query'              => [
+				[
+					'taxonomy' => get_log_taxonomy(),
+					'field'    => 'slug',
+					'terms'    => 'plugin_zip_backup_complete',
+				],
+			],
+			'meta_query'             => [
+				[
+					'key'     => '_plugins_backed_up',
+					'value'   => $premium_plugins_list,
+					'compare' => '=',
+				],
+			],
+			'posts_per_page'         => 1,
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+			'fields'                 => 'ids',
+		]
+	);
+
+	wp_reset_query();
+
+	if ( ! is_wp_error( $check_plugins_backed_up_before ) && ! empty( $check_plugins_backed_up_before->posts ) ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Check if the external URL domain is blocked by the WP_HTTP_BLOCK_EXTERNAL constant.
+ *
+ * Only checks if the site is blocked by WordPress, not of the site is actually reachable by the site.
+ *
+ * @param string $url URL to check.
+ *
+ * @return bool True if the domain is blocked. False if the domain is not explicitly blocked by WordPress.
+ */
+function is_external_domain_blocked( $url ) {
+	$is_url_blocked = false;
+
+	if ( defined( 'WP_HTTP_BLOCK_EXTERNAL' ) && true === WP_HTTP_BLOCK_EXTERNAL ) {
+		$url_parts      = wp_parse_url( $url );
+		$url_domain     = sprintf( '%s://%s', $url_parts['scheme'], $url_parts['host'] );
+		$check_host     = new \WP_Http();
+		$is_url_blocked = $check_host->block_request( $url_domain );
+	}
+
+	return $is_url_blocked;
+}
+
+/**
+ * Test if this website is in some development mode based on a list of flags.
+ *
+ * Detect if the site is in some known development state.
+ *
+ * @return bool True if the site is in some development mode. False if not in a known development mode.
+ */
+function is_development_mode() {
+	$home_url      = home_url( '/' );
+	$domain        = wp_parse_url( $home_url, PHP_URL_HOST );
+	$tlds_to_check = [
+		'cshp.co',
+		'cshp.dev',
+		'kinsta.cloud',
+		'pantheonsite.io',
+		'wpengine.com',
+		'flywheelstaging.com',
+		'flywheelsites.com',
+		'dreamhosters.com',
+	];
+
+	foreach ( $tlds_to_check as $tld ) {
+		if ( function_exists( '\str_ends_with' ) ) {
+			if ( str_ends_with( $domain, $tld ) ) {
+				return true;
+			}
+		} elseif ( false !== strpos( $domain, $tld, -strlen( $tld ) ) ) {
+			return true;
+		}
+	}
+
+	if ( ( defined( 'KINSTA_DEV_ENV' ) && true === KINSTA_DEV_ENV ) ||
+	'production' !== wp_get_environment_type() ||
+	( function_exists( '\wp_get_development_mode' ) && ! empty( wp_get_development_mode() ) ) ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Get the full path to a wp-content/plugins folder.
+ *
+ * WordPress has no built-in way to get the full path to a plugins folder.
+ *
+ * @return string Absolute path to a wp-content/plugins folder.
+ */
+function get_plugin_folders_path() {
 	require_once ABSPATH . '/wp-admin/includes/file.php';
 	WP_Filesystem();
 
@@ -3215,7 +3762,20 @@ function get_plugin_file_full_path( $plugin_folder_name_and_main_file ) {
 	} catch ( \TypeError $error ) {
 	}
 
-	return sprintf( '%s%s%s', $plugin_directory, DIRECTORY_SEPARATOR, $plugin_folder_name_and_main_file );
+	return $plugin_directory;
+}
+
+/**
+ * Get the full path to a plugin file
+ *
+ * WordPress has no built-in way to get the full path to a plugin's main file when getting a list of plugins from the site.
+ *
+ * @param string $plugin_folder_name_and_main_file Plugin folder and main file (e.g. cshp-plugin-tracker/cshp-plugin-tracker.php).
+ *
+ * @return string Absolute path to a plugin file.
+ */
+function get_plugin_file_full_path( $plugin_folder_name_and_main_file ) {
+	return sprintf( '%s%s%s', get_plugin_folders_path(), DIRECTORY_SEPARATOR, $plugin_folder_name_and_main_file );
 }
 
 /**

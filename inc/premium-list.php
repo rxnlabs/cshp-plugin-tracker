@@ -63,6 +63,7 @@ function premium_plugins_list() {
 			'mapsvg',
 			'memberpress',
 			'media-deduper-pro',
+			'perfmatters',
 			'restrict-content-pro',
 			'rcp-group-accounts',
 			'rcp-per-level-emails',
@@ -100,6 +101,7 @@ function premium_plugins_list() {
  */
 function premium_themes_list() {
 	return [
+		'astra-child',
 		'bjork',
 		'blocksy-child',
 		'crate',
