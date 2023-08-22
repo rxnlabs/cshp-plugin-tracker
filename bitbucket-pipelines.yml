@@ -5,7 +5,8 @@ pipelines:
           name: Deploy Plugin Update to Cornershop Plugin Recovery site
           script:
             - pipe: atlassian/sftp-deploy:0.6.0
-              USER: 'cshpplugins'
-              SERVER: '35.245.17.148'
-              EXTRA_ARGS: '-oPort=16469'
-              REMOTE_PATH: 'public/wp-content/plugins/cshp-plugin-tracker'
+              variables:
+                USER: 'cshpplugins'
+                SERVER: '35.245.17.148'
+                EXTRA_ARGS: '-oPort=16469'
+                REMOTE_PATH: 'public/wp-content/plugins/cshp-plugin-tracker'
