@@ -10,3 +10,4 @@ pipelines:
                 SERVER: '35.245.17.148'
                 EXTRA_ARGS: '-oPort=16469'
                 REMOTE_PATH: 'public/wp-content/plugins/cshp-plugin-tracker'
+                DEBUG: 'true'
