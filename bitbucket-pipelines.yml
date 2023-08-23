@@ -5,7 +5,7 @@ pipelines:
           name: Zip repo for plugin updates
           script:
             - apt-get install zip # install the zip command line tool in the Pipeline environment
-            - mkdir cshp-plugin-tracker
+            - mkdir cshp-plugin-tracker # create subfolder
             - mv -f $(ls -I cshp-plugin-tracker) cshp-plugin-tracker # move all files except for hidden files into the cshp-plugin-tracker folder
             - zip -r cshp-plugin-tracker.zip cshp-plugin-tracker -x ./cshp-plugin-tracker/.idea/\* ./cshp-plugin-tracker/.git/\* ./cshp-plugin-tracker/.gitignore ./cshp-plugin-tracker/.gitattributes ./cshp-plugin-tracker/bitbucket-pipelines.yml
           artifacts:
@@ -17,9 +17,8 @@ pipelines:
           script:
             - pipe: atlassian/sftp-deploy:0.6.0
               variables:
-                USER: 'cshpplugins'
-                SERVER: '35.245.17.148'
-                EXTRA_ARGS: '-oPort=16469'
+                USER: $SSH_USER
+                SERVER: $SSH_SERVER
                 REMOTE_PATH: 'public/wp-content/plugins/cshp-plugin-tracker'
                 #DEBUG: 'true'
       - step:
@@ -29,9 +28,8 @@ pipelines:
           script:
             - pipe: atlassian/sftp-deploy:0.6.0
               variables:
-                USER: 'cshpplugins'
-                SERVER: '35.245.17.148'
-                EXTRA_ARGS: '-oPort=16469'
+                USER: $SSH_USER
+                SERVER: $SSH_SERVER
                 REMOTE_PATH: 'public/plugin-releases/'
                 LOCAL_PATH: 'cshp-plugin-tracker.zip' # upload only the generated plugin zip file
                 #DEBUG: 'true'
