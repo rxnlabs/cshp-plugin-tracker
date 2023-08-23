@@ -6,7 +6,7 @@ pipelines:
           script:
             - apt-get install zip # install the zip command line tool in the Pipeline environment
             - mkdir cshp-plugin-tracker
-            - mv -f * cshp-plugin-tracker/
+            - mv -f $(ls -I cshp-plugin-tracker) cshp-plugin-tracker # move all files except for hidden files into the cshp-plugin-tracker folder
             - zip -r cshp-plugin-tracker.zip cshp-plugin-tracker -x ./cshp-plugin-tracker/.idea/\* ./cshp-plugin-tracker/.git/\* ./cshp-plugin-tracker/.gitignore ./cshp-plugin-tracker/.gitattributes ./cshp-plugin-tracker/bitbucket-pipelines.yml
           artifacts:
             - cshp-plugin-tracker.zip
