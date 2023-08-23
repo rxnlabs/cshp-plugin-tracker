@@ -19,8 +19,9 @@ pipelines:
               variables:
                 USER: $SSH_USER
                 SERVER: $SSH_SERVER
+                EXTRA_ARGS: '-oPort=16469'
                 REMOTE_PATH: 'public/wp-content/plugins/cshp-plugin-tracker'
-                #DEBUG: 'true'
+                DEBUG: 'true'
       - step:
           name: Update plugin zip to Cornershop Plugin Recovery site
           artifacts:
@@ -30,6 +31,7 @@ pipelines:
               variables:
                 USER: $SSH_USER
                 SERVER: $SSH_SERVER
+                EXTRA_ARGS: '-oPort=16469'
                 REMOTE_PATH: 'public/plugin-releases/'
                 LOCAL_PATH: 'cshp-plugin-tracker.zip' # upload only the generated plugin zip file
-                #DEBUG: 'true'
+                DEBUG: 'true'
