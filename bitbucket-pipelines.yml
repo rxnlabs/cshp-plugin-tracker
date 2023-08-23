@@ -2,7 +2,16 @@ pipelines:
   branches:
     develop:
       - step:
+          name: Zip repo for plugin updates
+          script:
+            - apt-get install zip
+            - zip -r cshp-plugin-tracker.zip . -x ./.idea/\* ./.git/\* bitbucket-pipelines.yml
+          artifacts:
+            - cshp-plugin-tracker.zip
+      - step:
           name: Deploy Plugin Update to Cornershop Plugin Recovery site
+          artifacts:
+            download: false # don't deploy the Zip file cshp-plugin-tracker.zip to the plugin folder
           script:
             - pipe: atlassian/sftp-deploy:0.6.0
               variables:
@@ -11,3 +20,16 @@ pipelines:
                 EXTRA_ARGS: '-oPort=16469'
                 REMOTE_PATH: 'public/wp-content/plugins/cshp-plugin-tracker'
                 DEBUG: 'true'
+      - step:
+          name: Update plugin zip to Cornershop Plugin Recovery site
+          artifacts:
+            download: true
+          script:
+            - pipe: atlassian/sftp-deploy:0.6.0
+              variables:
+                USER: 'cshpplugins'
+                SERVER: '35.245.17.148'
+                EXTRA_ARGS: '-oPort=16469'
+                REMOTE_PATH: 'public/plugin-releases/'
+                DEBUG: 'true'
+                LOCAL_PATH: 'cshp-plugin-tracker.zip'
