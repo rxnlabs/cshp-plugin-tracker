@@ -1,0 +1,37 @@
+pipelines:
+  tags:
+    develop:
+      - step:
+          name: Zip repo for plugin updates
+          script:
+            - apt-get install zip # install the zip command line tool in the Pipeline environment
+            - mkdir cshp-plugin-tracker # create subfolder
+            - mv -f $(ls -I cshp-plugin-tracker) cshp-plugin-tracker # move all files except for hidden files into the cshp-plugin-tracker folder
+            - zip -r cshp-plugin-tracker.zip cshp-plugin-tracker -x ./cshp-plugin-tracker/.idea/\* ./cshp-plugin-tracker/.git/\* ./cshp-plugin-tracker/.gitignore ./cshp-plugin-tracker/.gitattributes ./cshp-plugin-tracker/bitbucket-pipelines.yml
+          artifacts:
+            - cshp-plugin-tracker.zip
+      - step:
+          name: Deploy Plugin Update to Cornershop Plugin Recovery site
+          artifacts:
+            download: false # don't deploy the Zip file cshp-plugin-tracker.zip to the plugin folder
+          script:
+            - pipe: atlassian/sftp-deploy:0.6.0
+              variables:
+                USER: $SSH_USER
+                SERVER: $SSH_SERVER
+                EXTRA_ARGS: '-oPort=16469'
+                REMOTE_PATH: 'public/wp-content/plugins/cshp-plugin-tracker'
+                DEBUG: 'true'
+      - step:
+          name: Update plugin zip to Cornershop Plugin Recovery site
+          artifacts:
+            download: true
+          script:
+            - pipe: atlassian/sftp-deploy:0.6.0
+              variables:
+                USER: $SSH_USER
+                SERVER: $SSH_SERVER
+                EXTRA_ARGS: '-oPort=16469'
+                REMOTE_PATH: 'public/plugin-releases/'
+                LOCAL_PATH: 'cshp-plugin-tracker.zip' # upload only the generated plugin zip file
+                DEBUG: 'true'
