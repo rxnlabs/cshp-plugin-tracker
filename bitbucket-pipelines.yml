@@ -1,6 +1,6 @@
 pipelines:
   tags:
-    develop:
+    main:
       - step:
           name: Zip repo for plugin updates
           script:
