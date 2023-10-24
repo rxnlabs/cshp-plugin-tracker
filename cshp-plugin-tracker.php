@@ -3,7 +3,7 @@
 Plugin Name: Cornershop Plugin Tracker
 Plugin URI: https://cornershopcreative.com/
 Description: Keep track of the current versions of themes and plugins installed on a WordPress site. This plugin should <strong>ALWAYS be Active</strong> unless you are having an issue where this plugin is the problem. If you are having issues with this plugin, please contact Cornershop Creative's support.
-Version: 1.0.31
+Version: 1.0.32
 Text Domain: cshp-pt
 Author: Cornershop Creative
 Author URI: https://cornershopcreative.com/
@@ -224,7 +224,7 @@ function flush_composer_theme_delete( $stylesheet ) {
 		create_plugin_tracker_file();
 	}
 }
-add_action( 'delete_theme', __NAMESPACE__ . '\flush_composer_plugin_uninstall', 10, 1 );
+add_action( 'delete_theme', __NAMESPACE__ . '\flush_composer_theme_delete', 10, 1 );
 
 /**
  * Add a cron job to regenerate the composer.json file
