@@ -71,7 +71,7 @@ function command_plugin_zip( $args, $assoc_args ) {
 	\WP_CLI::log( esc_html__( 'Preparing to zip plugins...', Plugin_Tracker\get_textdomain() ) );
 
 	if ( false === $dry_run ) {
-		$result = Plugin_Tracker\zip_premium_plugins();
+		$result = Plugin_Tracker\zip_premium_plugins_include();
 		if ( Plugin_Tracker\get_premium_plugin_zip_file() === $result ) {
 			\WP_CLI::success( sprintf( esc_html__( 'Successfully generated premium plugins .zip at file path %s.', Plugin_Tracker\get_textdomain() ), Plugin_Tracker\get_premium_plugin_zip_file() ) );
 		} else {
@@ -127,10 +127,13 @@ function command_theme_zip( $args, $assoc_args ) {
 \WP_CLI::add_command( 'cshp-pt theme-zip', __NAMESPACE__ . '\command_theme_zip' );
 
 /**
- * Install the wordpress.org plugins that are activated on this site.
+ * Install the wordpress.org plugins that are activated on this site or install the premium plugins from a separate site based on passing the URL to the premium plugins zip file.
  *
  * [<zip_path|premium_plugin_download_url>]
  * : Path to the premium plugins zip file or URL to download the premium plugins zip file
+ *
+ * [<premium_plugin_folder_name>...]
+ * : One or more premium plugins to install separated by a space. Use if you want to install only some of the premium plugins but not all of the premium plugins.
  *
  * ## OPTIONS
  *
@@ -149,12 +152,26 @@ function command_plugin_install( $args, $assoc_args ) {
 	$dry_run               = false;
 	$force                 = false;
 	$premium_install       = false;
+	$specific_premium_plugins = [];
 	$global_params_string  = '';
 	$global_params_array   = [];
 	$passed_config_options = \WP_CLI::get_config();
 
 	if ( isset( $args[0] ) && ! empty( $args[0] ) ) {
 		$premium_install = $args[0];
+	}
+
+	foreach ( $args as $index => $addition_positional_arguments ) {
+		if ( 0 === $index || empty( trim( $addition_positional_arguments ) ) ) {
+			continue;
+		}
+
+		$specific_premium_plugins[] = $addition_positional_arguments;
+	}
+
+	// if we have passed specific plugins that we want to install, pass those plugins as arguments to pass to the live site so it only zips the passed plugins
+	if ( ! empty( $premium_install ) && ! empty( $specific_premium_plugins ) ) {
+		$premium_install = add_query_arg( [ 'plugins' => $specific_premium_plugins ], $premium_install );
 	}
 
 	if ( isset( $assoc_args['dry-run'] ) ) {
@@ -257,7 +274,7 @@ function command_plugin_install( $args, $assoc_args ) {
 						throw new \TypeError( __( 'Could not move plugin folder', Plugin_Tracker\get_textdomain() ) );
 					}
 				} catch ( \TypeError $error ) {
-					\WP_CLI::log( esc_html__( sprintf( 'Could not move the premium plugin folder %s to the WordPress plugins folder. Please make sure the plugins folder is readable and writeable. Your Filsystem may be in FTP mode.', basename( $file->getRealpath() ) ), Plugin_Tracker\get_textdomain() ) );
+					\WP_CLI::log( esc_html__( sprintf( 'Could not move the premium plugin folder %s to the WordPress plugins folder. Please make sure the plugins folder is readable and writeable. Your Filesystem may be in FTP mode.', basename( $file->getRealpath() ) ), Plugin_Tracker\get_textdomain() ) );
 				}
 			}//end if
 		}//end foreach
@@ -268,7 +285,7 @@ function command_plugin_install( $args, $assoc_args ) {
 				throw new \TypeError( __( 'Could not move plugin folder', Plugin_Tracker\get_textdomain() ) );
 			}
 		} catch ( \TypeError $error ) {
-			\WP_CLI::log( esc_html__( sprintf( 'Could not delete the premium plugin zip folder %s from the WordPress plugins folder. Please make sure the plugins folder is readable and writeable. Your Filsystem may be in FTP mode.', $premium_plugins_install_path ), Plugin_Tracker\get_textdomain() ) );
+			\WP_CLI::log( esc_html__( sprintf( 'Could not delete the premium plugin zip folder %s from the WordPress plugins folder. Please make sure the plugins folder is readable and writeable. Your Filesystem may be in FTP mode.', $premium_plugins_install_path ), Plugin_Tracker\get_textdomain() ) );
 		}
 
 		// Bulk activate the newly installed premium plugins
@@ -446,7 +463,7 @@ function command_theme_install( $args, $assoc_args ) {
 						throw new \TypeError( __( 'Could not move theme folder', Plugin_Tracker\get_textdomain() ) );
 					}
 				} catch ( \TypeError $error ) {
-					\WP_CLI::log( esc_html__( sprintf( 'Could not move the premium theme folder %s to the WordPress themes folder. Please make sure the themes folder is readable and writeable. Your Filsystem may be in FTP mode.', basename( $file->getRealpath() ) ), Plugin_Tracker\get_textdomain() ) );
+					\WP_CLI::log( esc_html__( sprintf( 'Could not move the premium theme folder %s to the WordPress themes folder. Please make sure the themes folder is readable and writeable. Your Filesystem may be in FTP mode.', basename( $file->getRealpath() ) ), Plugin_Tracker\get_textdomain() ) );
 				}
 			}//end if
 		}//end foreach
@@ -457,7 +474,7 @@ function command_theme_install( $args, $assoc_args ) {
 				throw new \TypeError( __( 'Could not move theme folder', Plugin_Tracker\get_textdomain() ) );
 			}
 		} catch ( \TypeError $error ) {
-			\WP_CLI::log( esc_html__( sprintf( 'Could not delete the premium theme zip folder %s from the WordPress themes folder. Please make sure the themes folder is readable and writeable. Your Filsystem may be in FTP mode.', $premium_themes_install_path ), Plugin_Tracker\get_textdomain() ) );
+			\WP_CLI::log( esc_html__( sprintf( 'Could not delete the premium theme zip folder %s from the WordPress themes folder. Please make sure the themes folder is readable and writeable. Your Filesystem may be in FTP mode.', $premium_themes_install_path ), Plugin_Tracker\get_textdomain() ) );
 		}
 
 		// Bulk activate the newly installed premium themes
