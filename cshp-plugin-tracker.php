@@ -4465,7 +4465,7 @@ function get_plugin_folders_path() {
  * @return string Absolute path to a plugin file.
  */
 function get_plugin_file_full_path( $plugin_folder_name_and_main_file ) {
-    // remove the director separator slash at the end of the plugin folder since we add the director separator explicitly
+    // remove the directory separator slash at the end of the plugin folder since we add the director separator explicitly
     $clean_plugin_folder_path = rtrim( get_plugin_folders_path(), DIRECTORY_SEPARATOR );
 	return sprintf( '%s%s%s', $clean_plugin_folder_path, DIRECTORY_SEPARATOR, $plugin_folder_name_and_main_file );
 }
