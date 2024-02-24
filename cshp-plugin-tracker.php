@@ -30,6 +30,10 @@ load_non_composer_libraries();
 require_once 'inc/license.php';
 // include file with list of premium plugins and themes
 require_once 'inc/premium-list.php';
+// include the file that handles backing up the premium plugins
+require_once 'inc/backup.php';
+// include file with utility functions
+require_once 'inc/utilities.php';
 
 // load the WP CLI commands
 if ( is_wp_cli_environment() ) {
@@ -739,6 +743,25 @@ function get_this_plugin_slug() {
 function get_plugin_update_url() {
     return 'https://plugins.cornershopcreative.com';
 }
+
+/**
+ * Add this plugin's update url to the list of safe URLs that can be used with remote requests.
+ *
+ * Useful if calling wp_safe_remote_get. Ensures that the plugin update URL is considered a safe URL to help avoid forced redirections.
+ *
+ * @param bool $return False if the URL is not considered safe, true if the URL is considered safe. By default, all URLs are considered safe.
+ * @param string $url External URL that is being requested.
+ *
+ * @return bool True if the external URL is considered safe, False, if the external URL is not considered safe.
+ */
+function add_plugin_update_url_to_safe_url_list( $return, $url ) {
+    if ( get_plugin_update_url() === $url ) {
+        return true;
+    }
+
+    return $return;
+}
+add_filter( 'http_request_reject_unsafe_urls', __NAMESPACE__ . '\add_plugin_update_url_to_safe_url_list', 99, 2 );
 
 /**
  * Get the path to the premium plugin download zip file.
@@ -1495,16 +1518,6 @@ add_action( 'cshp_pt_regenerate_composer_daily', __NAMESPACE__ . '\create_plugin
 add_action( 'cshp_pt_regenerate_composer_post_bulk_update', __NAMESPACE__ . '\create_plugin_tracker_file_cron' );
 
 /**
- * Backup the zip of the premium plugins during a cron job.
- *
- * @return void
- */
-function backup_premium_plugins_cron() {
-	backup_premium_plugins();
-}
-add_action( 'cshp_pt_regenerate_composer_daily', __NAMESPACE__ . '\backup_premium_plugins_cron' );
-
-/**
  * Update the composer file one-minute after some action. Usually after bulk plugin updates or bulk plugin installs.
  *
  * Useful to prevent the composer file from being written to multiple times after each plugin is updated.
@@ -2051,6 +2064,7 @@ function add_rewrite_query_vars( $vars ) {
 		[
 			'cshp_plugin_tracker',
 			'cshp_plugin_tracker_action',
+            'cshp_pt_cpr',
 		],
 		$vars
 	);
@@ -2086,6 +2100,57 @@ function add_rest_api_endpoint() {
 add_action( 'rest_api_init', __NAMESPACE__ . '\add_rest_api_endpoint' );
 
 /**
+ * The token to verify.
+ *
+ * @param string $passed_token The token that is used to verify that premium plugins can be downloaded from this website.
+ *
+ * @return bool True if the token was verified. False if the token could not be verified.
+ */
+function is_token_verify( $passed_token ) {
+	$stored_token = get_stored_token();
+
+    if ( ! empty( $passed_token ) && ! empty( $stored_token ) && $passed_token === $stored_token ) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Verify that the requesting site's IP address is whitelisted with the Cornershop Plugin Recovery website and therefore is authorized to download the plugins from this website.
+ *
+ * @return bool True if the IP address is verified. False otherwise.
+ */
+function is_ip_address_verify() {
+	$url = sprintf( '%s/wp-json/cshp-plugin-backup/verify', get_plugin_update_url() );
+
+	$request = wp_safe_remote_head( $url, [
+			'timeout' => 12,
+			'headers' => [
+                'CPR-Key' => get_request_ip_address(),
+			]
+		]
+	);
+
+	if ( 200 === wp_remote_retrieve_response_code( $request ) && true === boolval( wp_remote_retrieve_header( $request, 'cpr-key-verified' ) ) ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Check if a user or program is allowed to generate a zip file that contains the premium plugins and premium theme from this website.
+ *
+ * @param string $token Stored token on this website that is used to verify that a zip file can be generated.
+ *
+ * @return bool True if the token is verified or if the IP address is whitelisted. False otherwise.
+ */
+function is_authorized( $token = '' ) {
+	return ! empty( $token ) ? is_token_verify( $token ) : is_ip_address_verify();
+}
+
+/**
  * REST endpoint for downloading the premium plugins
  *
  * @param \WP_REST_Request $request WP REST API request.
@@ -2094,29 +2159,23 @@ add_action( 'rest_api_init', __NAMESPACE__ . '\add_rest_api_endpoint' );
  */
 function download_plugin_zip_rest( $request ) {
 	$passed_token = trim( sanitize_text_field( $request->get_param( 'token' ) ) );
-	$stored_token = get_stored_token();
 	$plugins = $request->get_param( 'plugins' );
 	$zip_all_plugins = true === boolval( sanitize_text_field( $request->get_param( 'include_all_plugins' ) ) );
     $zip_plugin_tracker = true === boolval( sanitize_text_field( $request->get_param( 'include_plugin_tracker' ) ) );
 	$clean_plugins = [];
 
-	if ( empty( $passed_token ) ) {
-		log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
-		return new \WP_REST_Response(
-			[
-				'error'   => true,
-				'message' => esc_html__( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() ),
-			],
-			403
-		);
-	}
+	if ( ! is_authorized( $passed_token ) ) {
+        $message = '';
 
-	if ( empty( $stored_token ) || $passed_token !== $stored_token ) {
-		log_request( 'token_verify_fail' );
+        if ( empty( $passed_token ) ) {
+            $message = sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() );
+        }
+
+		log_request( 'token_verify_fail', $message );
 		return new \WP_REST_Response(
 			[
 				'error'   => true,
-				'message' => esc_html__( 'Token is not authorized', get_textdomain() ),
+				'message' => esc_html__( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() ),
 			],
 			403
 		);
@@ -2162,25 +2221,19 @@ function download_plugin_zip_rest( $request ) {
  */
 function download_theme_zip_rest( $request ) {
 	$passed_token = trim( sanitize_text_field( $request->get_param( 'token' ) ) );
-	$stored_token = get_stored_token();
 
-	if ( empty( $passed_token ) ) {
-		log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
+	if ( ! is_authorized( $passed_token ) ) {
+		$message = '';
+
+		if ( empty( $passed_token ) ) {
+			$message = sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() );
+		}
+
+		log_request( 'token_verify_fail', $message );
 		return new \WP_REST_Response(
 			[
 				'error'   => true,
-				'message' => esc_html__( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() ),
-			],
-			403
-		);
-	}
-
-	if ( empty( $stored_token ) || $passed_token !== $stored_token ) {
-		log_request( 'token_verify_fail' );
-		return new \WP_REST_Response(
-			[
-				'error'   => true,
-				'message' => esc_html__( 'Token is not authorized', get_textdomain() ),
+				'message' => esc_html__( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() ),
 			],
 			403
 		);
@@ -2220,21 +2273,19 @@ function download_plugin_zip_rewrite( &$query ) {
 		 && 'download' === $query->query_vars['cshp_plugin_tracker_action'] ) {
 
 		$passed_token = trim( sanitize_text_field( $_GET['token'] ) );
-		$stored_token = get_stored_token();
 		$plugins = $_GET['plugins'];
 		$clean_plugins = [];
 
-		if ( empty( $passed_token ) ) {
-			http_response_code( 403 );
-			log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
-			esc_html_e( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() );
-			exit;
-		}
+		if ( ! is_authorized( $passed_token ) ) {
+			$message = '';
 
-		if ( empty( $stored_token ) || $passed_token !== $stored_token ) {
+			if ( empty( $passed_token ) ) {
+				$message = sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() );
+			}
+
 			http_response_code( 403 );
-			log_request( 'token_verify_fail' );
-			esc_html_e( 'Token is not authorized', get_textdomain() );
+			log_request( 'token_verify_fail', $message );
+			esc_html_e( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() );
 			exit;
 		}
 
@@ -2278,19 +2329,17 @@ function download_theme_zip_rewrite( &$query ) {
 		 && 'download' === $query->query_vars['cshp_plugin_tracker_action'] ) {
 
 		$passed_token = trim( sanitize_text_field( $_GET['token'] ) );
-		$stored_token = get_stored_token();
 
-		if ( empty( $passed_token ) ) {
-			http_response_code( 403 );
-			log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
-			esc_html_e( 'No token passed to endpoint. You must pass a token for this request', get_textdomain() );
-			exit;
-		}
+		if ( ! is_authorized( $passed_token ) ) {
+			$message = '';
 
-		if ( empty( $stored_token ) || $passed_token !== $stored_token ) {
+			if ( empty( $passed_token ) ) {
+				$message = sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() );
+			}
+
 			http_response_code( 403 );
-			log_request( 'token_verify_fail' );
-			esc_html_e( 'Token is not authorized', get_textdomain() );
+			log_request( 'token_verify_fail', $message );
+			esc_html_e( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() );
 			exit;
 		}
 
@@ -3318,7 +3367,8 @@ add_action( 'admin_notices', __NAMESPACE__ . '\admin_notice', 10 );
  * @return void
  */
 function admin_enqueue() {
-	if ( ! empty( get_current_screen() ) && 'settings_page_cshp-plugin-tracker' === get_current_screen()->id ) {
+    $screen_ids = [ 'settings_page_cshp-plugin-tracker', 'plugin-install' ];
+	if ( ! empty( get_current_screen() ) && in_array( get_current_screen()->id, $screen_ids, true ) ) {
 		wp_enqueue_script( 'simple-datatables', get_plugin_file_uri( '/assets/vendor/simple-datatables/js/simple-datatables.min.js' ), [], '7.1.2', true );
 		wp_enqueue_style( 'simple-datatables', get_plugin_file_uri( '/assets/vendor/simple-datatables/css/simple-datatables.min.css' ), [], '7.1.2', true );
 		wp_enqueue_script( 'cshp-plugin-tracker', get_plugin_file_uri( '/assets/js/admin.js' ), [ 'simple-datatables', 'wp-api-fetch' ], get_version(), true );
@@ -4028,303 +4078,6 @@ function maybe_update_tracker_file() {
 	if ( empty( $composer_file ) || ( isset( $composer['require'] ) &&
 		 isset( $composer_file['require'] ) &&
 		 ! empty( array_diff_assoc( $composer['require'], $composer_file['require'] ) ) ) ) {
-		return true;
-	}
-
-	return false;
-}
-
-/**
- * Back up the premium plugins zip to a dedicated backup retrieval site.
- *
- * Useful for retrieving the old versions of premium plugins that are on sites if these plugins are not in Git
- * and the plugin sites don't let you download old versions (e.g. Gravity Forms)
- *
- * @return bool|string True if the premium zip file was backed up successfully. Error message if the zip could not be backed up.
- */
-function backup_premium_plugins() {
-	$return_message                    = '';
-	$plugin_content_compare            = [];
-	$generated_zip_file_during_command = false;
-	$error_zip_file                    = false;
-	$backup_url                        = sprintf( '%s/wp-json/cshp-plugin-backup/backup', get_plugin_update_url() );
-	$plugin_content                    = generate_composer_installed_plugins();
-	$excluded_plugins                  = get_excluded_plugins();
-
-	if ( ! function_exists( '\curl_init' ) || is_development_mode() ) {
-
-		$return_message = esc_html__( 'Can only backup plugins on sites with: cURL installed, in production mode, and not in a known development environment.', get_textdomain() );
-
-		// flag if the site is in production mode but the Kinsta dev environment constant is set
-		if ( defined( 'KINSTA_DEV_ENV' ) &&
-			 true === KINSTA_DEV_ENV &&
-			 'production' === wp_get_environment_type() ) {
-			$return_message = esc_html__( 'Error backing up plugin zip: Website is in production mode but the KINSTA_DEV_ENV flag is on. Turn off the KINSTA_DEV_ENV flag.', get_textdomain() );
-			log_request( 'plugin_zip_backup_error', $return_message );
-		}
-
-		return $return_message;
-	}
-
-	foreach ( $plugin_content as $plugin_key => $version ) {
-		if ( false === strpos( $plugin_key, 'premium-plugin' ) ) {
-			continue;
-		}
-
-		$plugin_folder_name = str_replace( 'premium-plugin/', '', $plugin_key );
-
-		// prevent this plugin from being included in the premium plugins zip file
-		// exclude plugins that we explicitly don't want to download
-		// if the plugin should not download when we create the zip, don't back it up
-		if ( $plugin_folder_name === get_this_plugin_folder() || in_array( $plugin_folder_name, $excluded_plugins, true ) ) {
-			continue;
-		}
-
-		$plugin_content_compare[ $plugin_folder_name ] = $version;
-	}
-
-	ksort( $plugin_content_compare );
-
-	if ( is_external_domain_blocked( $backup_url ) ) {
-		$return_message = esc_html__( 'Plugin zip backup site is blocked by WP_HTTP_BLOCK_EXTERNAL', get_textdomain() );
-		log_request( 'plugin_zip_backup_error', $return_message );
-		return $return_message;
-	}
-
-	// If this combination of premium plugins have already been backed up before,
-	if ( has_premium_plugins_version_backed_up( $plugin_content_compare ) ) {
-		$return_message = esc_html__( 'This version of the premium plugins have already been backed up. You can only backup a unique combination of plugins.', get_textdomain() );
-		log_request( 'plugin_zip_backup_error', $return_message );
-		return $return_message;
-	}
-
-	// If the premium plugins have already been backed up today, don't try to back up again.
-	if ( has_premium_plugins_backed_up_today() ) {
-		$return_message = esc_html__( 'Premium plugins already backed up today. Can only back up once a day.', get_textdomain() );
-		log_request( 'plugin_zip_backup_error', $return_message );
-		return $return_message;
-	}
-
-	if ( maybe_update_tracker_file() || ! does_zip_exists( get_premium_plugin_zip_file() ) ) {
-		$result = zip_premium_plugins_include();
-
-		if ( ! does_zip_exists( $result ) ) {
-			$error_zip_file = true;
-			$return_message = esc_html__( 'Could not create a backup due to  error zipping premium plugins. Check plugin log.', get_textdomain() );
-			log_request( 'plugin_zip_backup_error', $return_message );
-		}
-	}
-
-	if ( ! $error_zip_file && ! empty( get_premium_plugin_zip_file() ) ) {
-        $premium_plugin_zip_file = get_premium_plugin_zip_file();
-        $archive_zip_file_name = basename( $premium_plugin_zip_file );
-		$plugin_content       = wp_json_encode( get_premium_plugin_zip_file_contents( $archive_zip_file_name ) );
-		$home_url             = home_url( '/' );
-		$domain               = wp_parse_url( $home_url );
-		$zip_file_upload_name = sprintf( '%s.zip', sanitize_title( sprintf( '%s/%s', $domain['host'], $domain['path'] ) ) );
-		$curl_file            = new \CurlFile( $premium_plugin_zip_file );
-		$curl_file->setPostFilename( $zip_file_upload_name );
-		$form_fields = [
-			'domain'                  => $home_url,
-			'premium_plugin_zip_file' => $curl_file,
-			'plugins'                 => $plugin_content,
-		];
-
-		// Use an anonymous function and pass the local variable that we want to post to that function since
-		// the http_api_curl hook does not pass the data that we actually want to POST with the hook
-		$file_upload_request = function( $handle_or_parameters, $request = '', $url = '' ) use ( $form_fields ) {
-			update_wp_http_request( $handle_or_parameters, $form_fields );
-		};
-		// handle cURL requests if we have cURL installed
-		add_action( 'http_api_curl', $file_upload_request, 10 );
-		// handle fsockopen requests if we don't have cURL installed
-		add_action( 'requests-fsockopen.before_send', $file_upload_request, 10, 3 );
-
-		$request = wp_remote_post(
-			$backup_url,
-			[
-				'body'    => $form_fields,
-				'headers' => [ 'content-type' => 'multipart/form-data' ],
-                'timeout' => 12,
-			]
-		);
-
-		if ( 200 === wp_remote_retrieve_response_code( $request ) ||
-			 201 === wp_remote_retrieve_response_code( $request ) ||
-			 202 === wp_remote_retrieve_response_code( $request ) ) {
-			$return_message = sprintf( esc_html__( 'Successfully backed up plugin zip %s', get_textdomain() ), $archive_zip_file_name );
-			$log_post       = log_request( 'plugin_zip_backup_complete', $return_message );
-
-			if ( ! empty( $log_post ) && ! is_wp_error( $log_post ) ) {
-				update_post_meta( $log_post, '_plugins_backed_up', $plugin_content );
-			}
-		} else {
-			$result = wp_remote_retrieve_body( $request );
-			// If we received ane empty error message from the server, then we may be blocked
-			if ( empty( $result ) ) {
-				$result = __( 'Empty error message returned from back up site. This site may be blocked by the backup site\'s server.', get_textdomain() );
-			}
-
-			$return_message = sprintf( esc_html__( 'Error backing up plugin zip %1$s: %2$s', get_textdomain() ), basename( get_premium_plugin_zip_file() ), $result );
-			log_request( 'plugin_zip_backup_error', $return_message );
-		}//end if
-	}//end if
-
-	return ! empty( $return_message ) ? $return_message : true;
-}
-
-/**
- * Update the WP cURL and fsockopen requests to make them work with file uploads.
- *
- * @param resource|array $handle_or_parameters cURL handle or fsockopen parameters. This is passed by reference.
- * @param array          $form_body_arguments Form data to POST to the remote service.
- * @param string         $url The URL that the cURL or fsockopen request is being made to.
- *
- * @return void
- */
-function update_wp_http_request( &$handle_or_parameters, $form_body_arguments = '', $url = '' ) {
-	if ( function_exists( '\curl_init' ) && function_exists( '\curl_exec' ) ) {
-		foreach ( $form_body_arguments as $value ) {
-			// Only do this if we are using PHP 5.5+ CURLFile file to upload a file
-			if ( 'object' === gettype( $value ) && $value instanceof \CURLFile ) {
-				/*
-				Use the request body as an array to force cURL make a requests using 'multipart/form-data'
-				as the Content-type header instead of WP's default habit of converting the request to
-				a string using http_build_query function
-				*/
-				curl_setopt( $handle_or_parameters, CURLOPT_POSTFIELDS, $form_body_arguments );
-				break;
-			}
-		}
-	} elseif ( function_exists( '\fsockopen' ) ) {
-		// UNTESTED SINCE I HAVE cURL INSTALLED AND CANNOT TEST THIS
-		$form_fields = [];
-		$form_files  = [];
-		foreach ( $form_body_arguments as $name => $value ) {
-			if ( file_exists( $value ) ) {
-				// Not great for large files since it dumps into memory but works well for small files
-				$form_files[ $name ] = file_get_contents( $value );
-			} else {
-				$form_fields[ $name ] = $value;
-			}
-		}
-
-		/**
-		 * Convert form fields arrays to a string that fsockopen requests can understand
-		 *
-		 * @see https://gist.github.com/maxivak/18fcac476a2f4ea02e5f80b303811d5f
-		 */
-		function build_data_files( $boundary, $fields, $files ) {
-			$data = '';
-			$eol  = "\r\n";
-
-			$delimiter = '-------------' . $boundary;
-
-			foreach ( $fields as $name => $content ) {
-				$data .= '--' . $delimiter . $eol
-						 . 'Content-Disposition: form-data; name="' . $name . '"' . $eol . $eol
-						 . $content . $eol;
-			}
-
-			foreach ( $files as $name => $content ) {
-				$data .= '--' . $delimiter . $eol
-						 . 'Content-Disposition: form-data; name="' . $name . '"; filename="' . $name . '"' . $eol
-						 // . 'Content-Type: image/png'.$eol
-						 . 'Content-Transfer-Encoding: binary' . $eol;
-
-				$data .= $eol;
-				$data .= $content . $eol;
-			}
-			$data .= '--' . $delimiter . '--' . $eol;
-
-			return $data;
-		}
-		$boundary             = uniqid();
-		$handle_or_parameters = build_data_files( $boundary, $form_fields, $form_files );
-	}//end if
-}
-
-/**
- * Check if the premium plugins zip have already been backed up today.
- *
- * @return bool True if the premium plugins have been successfully backed up today. False if there was no successful backup.
- */
-function has_premium_plugins_backed_up_today() {
-	$today                        = current_datetime();
-	$check_plugins_uploaded_today = new \WP_Query(
-		[
-			'post_type'              => get_log_post_type(),
-			'post_status'            => 'private',
-			'tax_query'              => [
-				[
-					'taxonomy' => get_log_taxonomy(),
-					'field'    => 'slug',
-					'terms'    => 'plugin_zip_backup_complete',
-				],
-			],
-			'date_query'             => [
-				[
-					'year'  => $today->format( 'Y' ),
-					'month' => $today->format( 'm' ),
-					'day'   => $today->format( 'd' ),
-				],
-			],
-			'posts_per_page'         => 1,
-			'no_found_rows'          => true,
-			'update_post_meta_cache' => false,
-			'fields'                 => 'ids',
-		]
-	);
-
-	wp_reset_query();
-
-	if ( ! is_wp_error( $check_plugins_uploaded_today ) ) {
-		return ! empty( $check_plugins_uploaded_today->posts );
-	}
-
-	return false;
-}
-
-/**
- * Check if this version of the premium plugins have already been backed up.
- *
- * @param array $premium_plugins_list Associative array of plugins and versions that we are preparing for a backup.
- *
- * @return bool True if this version of the plugins zip has already been backed up.
- */
-function has_premium_plugins_version_backed_up( $premium_plugins_list ) {
-	if ( is_array( $premium_plugins_list ) || is_object( $premium_plugins_list ) ) {
-		$premium_plugins_list = wp_json_encode( $premium_plugins_list );
-	}
-
-	$check_plugins_backed_up_before = new \WP_Query(
-		[
-			'post_type'              => get_log_post_type(),
-			'post_status'            => 'private',
-			'tax_query'              => [
-				[
-					'taxonomy' => get_log_taxonomy(),
-					'field'    => 'slug',
-					'terms'    => 'plugin_zip_backup_complete',
-				],
-			],
-			'meta_query'             => [
-				[
-					'key'     => '_plugins_backed_up',
-					'value'   => $premium_plugins_list,
-					'compare' => '=',
-				],
-			],
-			'posts_per_page'         => 1,
-			'no_found_rows'          => true,
-			'update_post_meta_cache' => false,
-			'fields'                 => 'ids',
-		]
-	);
-
-	wp_reset_query();
-
-	if ( ! is_wp_error( $check_plugins_backed_up_before ) && ! empty( $check_plugins_backed_up_before->posts ) ) {
 		return true;
 	}
 
