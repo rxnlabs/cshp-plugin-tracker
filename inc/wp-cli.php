@@ -136,6 +136,8 @@ function command_theme_zip( $args, $assoc_args ) {
  * : One or more premium plugins to install separated by a space. Use if you want to install only some of the premium plugins but not all of the premium plugins.
  *
  * ## OPTIONS
+ * [--site-key]
+ * : Pass the site key that is used to download the premium plugins from a website without having to generate a token on the live website.
  *
  * [--force]
  * : Overwrite the current version of a premium plugin if the plugin is already installed
@@ -339,6 +341,9 @@ function command_plugin_install( $args, $assoc_args ) {
  * : Path to the premium themes zip file or URL to download the premium themes zip file
  *
  * ## OPTIONS
+ *
+ * [--site-key]
+ * : Pass the site key that is used to download the premium plugins from a website without having to generate a token on the live website.
  *
  * [--force]
  * : Overwrite the current version of a premium theme if the theme is already installed

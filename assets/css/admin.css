@@ -34,3 +34,8 @@
     width: 100%;
     height: 6rem;
 }
+
+/* hide the activate plugin button after installing the premium plugins from the Cornershop plugin recovery site since we cannot activate the premium plugins backup plugin on the install screen*/
+.plugin-card[class*="plugin-card-cpr-cornershop-plugin_recovery"] .activate-now {
+    display: none;
+}

@@ -17,12 +17,18 @@ namespace Cshp\pt\premium;
  *
  * @return void
  */
-function activation_hook() {
+function activation_hook( $override_premium_plugin_install_path = '' ) {
 	require_once ABSPATH . '/wp-admin/includes/file.php';
 	WP_Filesystem();
 
 	global $wp_filesystem;
-	$premium_plugins_install_path = get_plugin_folders_path() . get_this_plugin_folder();
+
+	if ( ! empty( $override_premium_plugin_install_path ) && is_dir( $override_premium_plugin_install_path ) ) {
+		$premium_plugins_install_path = $override_premium_plugin_install_path;
+	} else {
+		$premium_plugins_install_path = get_plugin_folders_path() . get_this_plugin_folder();
+	}
+
 	$error_messages = [];
 	$new_plugins_installed = [];
 
@@ -39,9 +45,9 @@ function activation_hook() {
 			$new_plugin_install_path = get_plugin_folders_path() . $premium_plugin_folder_name;
 			try {
 
-				// skip the directory if it already exists
+				// by default, this plugin will overwrite the currently installed plugin with whatever version of the plugin is included in this backup
 				if ( is_dir( $new_plugin_install_path ) ) {
-					continue;
+					$wp_filesystem->delete( $new_plugin_install_path , true, 'd' );
 				}
 
 				$result = $wp_filesystem->move( $file->getRealpath(), $new_plugin_install_path, true );
@@ -65,7 +71,7 @@ function activation_hook() {
 }
 register_activation_hook( __FILE__, __NAMESPACE__ . '\activation_hook' );
 
-function post_activate() {
+function post_activate( $override_premium_plugin_install_path = '' ) {
 	// don't fire the activation hook if we are in the plugin sandbox
 	if ( defined( 'WP_SANDBOX_SCRAPING' ) && WP_SANDBOX_SCRAPING ) {
 		return;
@@ -76,8 +82,14 @@ function post_activate() {
 
 	global $wp_filesystem;
 	$active_plugins = get_active_plugins();
-	$premium_plugins_install_path = get_plugin_folders_path() . get_this_plugin_folder();
-	$premium_plugins_install_relative_path = get_this_plugin_folder() . '/' . get_this_plugin_file();
+	if ( ! empty( $override_premium_plugin_install_path ) && is_dir( $override_premium_plugin_install_path ) ) {
+		$premium_plugins_install_path = $override_premium_plugin_install_path;
+		$premium_plugins_install_relative_path = str_replace( get_plugin_folders_path(), '', $premium_plugins_install_path );
+	} else {
+		$premium_plugins_install_path = get_plugin_folders_path() . get_this_plugin_folder();
+		$premium_plugins_install_relative_path = get_this_plugin_folder() . '/' . get_this_plugin_file();
+	}
+
 	$composer_file_path = sprintf( '%s/composer.json', $premium_plugins_install_path );
 	$composer_file = wp_json_file_decode( $composer_file_path, [ 'associative' => true ] );
 	$premium_plugins_to_activate = [];
@@ -135,22 +147,21 @@ function post_activate() {
 		activate_plugins( $plugin_files_to_load, '' );
 	}
 
-	// if there are no premium plugins left in this folder (i.e. all have been moved up to the main plugin folder), then delete this plugin
-	if ( empty( $subfolders_in_this_directory ) ) {
-		deactivate_plugins( $premium_plugins_install_relative_path, true );
-		try {
-			$result = $wp_filesystem->delete( $premium_plugins_install_path , true, 'd' );
-			if ( true !== $result ) {
-				throw new \TypeError( __( 'Could not move plugin folder', 'cshp_premium_plugin' ) );
-			}
-		} catch ( \TypeError $error ) {
-			$error_message = esc_html__( sprintf( 'Could not delete the premium plugin zip folder %s from the WordPress plugins folder. Please make sure the plugins folder is readable and writeable. Your Filesystem may be in FTP mode.', $premium_plugins_install_path ), 'cshp_premium_plugin' );
+	deactivate_plugins( $premium_plugins_install_relative_path, true );
+
+	try {
+		$result = $wp_filesystem->delete( $premium_plugins_install_path , true, 'd' );
+		if ( true !== $result ) {
+			throw new \TypeError( __( 'Could not move plugin folder', 'cshp_premium_plugin' ) );
 		}
-	} else {
-		$error_message = sprintf( __( 'Could not copy the following plugins from the Cornershop Premium Plugins folder to the WordPress plugins folder: %s. Please make sure the plugins folder is readable and writeable. Your Filesystem may be in FTP mode.', 'cshp_premium_plugin' ), implode( ', ', $subfolders_in_this_directory ) );
+	} catch ( \TypeError $error ) {
+		$error_message = esc_html__( sprintf( 'Could not delete the premium plugin zip folder %s from the WordPress plugins folder. Please make sure the plugins folder is readable and writeable. Your Filesystem may be in FTP mode.', $premium_plugins_install_path ), 'cshp_premium_plugin' );
 	}
 
-	// display the error to the user if the plugin cannot delete itself or if there are some premium plugins that are still subfolders
+	if ( ! empty( $subfolders_in_this_directory ) ) {
+		update_option( 'cshp_pt_premium_skipped_plugins', json_encode( $subfolders_in_this_directory ) );
+	}
+
 	if ( ! empty( $error_message ) ) {
 		add_action( 'admin_notices', function() use ( $error_message ) {
 			echo sprintf( '<div class="notice notice-error is-dismissible">%s</div>', $error_message );
