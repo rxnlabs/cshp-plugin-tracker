@@ -1,39 +1,48 @@
 pipelines:
-      tags:
-            '*':
-                  - step:
-                          name: Zip repo for plugin updates
-                          script:
-                                - apt-get install zip # install the zip command line tool in the Pipeline environment
-                                - apt-get install rsync # install rsync tool
-                                - mkdir cshp-plugin-tracker
-                                - rsync -av --progress * cshp-plugin-tracker --exclude cshp-plugin-tracker --exclude .git --exclude .gitattributes --exclude .gitignore --exclude justfile --exclude bitbucket-pipelines.yml --exclude .idea --exclude bitbucket-pipelines.yml --exclude composer.json --exclude composer.lock --exclude inc/beta.php --exclude inc/beta-wpcli.php
-                                - zip -rv cshp-plugin-tracker.zip cshp-plugin-tracker
-                          artifacts:
-                                - cshp-plugin-tracker.zip
-                  - step:
-                          name: Deploy Plugin Update to Cornershop Plugin Recovery site
-                          artifacts:
-                                download: false # don't deploy the Zip file cshp-plugin-tracker.zip to the plugin folder
-                          script:
-                                - rm -Rf .git .gitattributes .gitignore justfile .idea bitbucket-pipelines.yml composer.json composer.lock inc/beta.php inc/beta-wpcli.php
-                                - pipe: atlassian/sftp-deploy:0.6.0
-                                  variables:
-                                        USER: $SSH_USER
-                                        SERVER: $SSH_SERVER
-                                        EXTRA_ARGS: '-oPort=16469'
-                                        REMOTE_PATH: 'public/wp-content/plugins/cshp-plugin-tracker'
-                                        DEBUG: 'true'
-                  - step:
-                          name: Update plugin zip to Cornershop Plugin Recovery site
-                          artifacts:
-                                download: true
-                          script:
-                                - pipe: atlassian/sftp-deploy:0.6.0
-                                  variables:
-                                        USER: $SSH_USER
-                                        SERVER: $SSH_SERVER
-                                        EXTRA_ARGS: '-oPort=16469'
-                                        REMOTE_PATH: 'public/plugin-releases/'
-                                        LOCAL_PATH: 'cshp-plugin-tracker.zip' # upload only the generated plugin zip file
-                                        DEBUG: 'true'
+  tags:
+    '*':
+      - step:
+          name: Zip repo for plugin updates
+          script:
+            - apt-get install zip
+            - apt-get install rsync
+            - mkdir cshp-plugin-tracker
+            - >-
+              rsync -av --progress * cshp-plugin-tracker --exclude
+              cshp-plugin-tracker --exclude .git --exclude .gitattributes
+              --exclude .gitignore --exclude justfile --exclude
+              bitbucket-pipelines.yml --exclude .idea --exclude
+              bitbucket-pipelines.yml --exclude composer.json --exclude
+              composer.lock --exclude inc/beta.php --exclude inc/beta-wpcli.php
+            - zip -rv cshp-plugin-tracker.zip cshp-plugin-tracker
+          artifacts:
+            - cshp-plugin-tracker.zip
+      - step:
+          name: Deploy Plugin Update to Cornershop Plugin Recovery site
+          artifacts:
+            download: false
+          script:
+            - >-
+              rm -Rf .git .gitattributes .gitignore justfile .idea
+              bitbucket-pipelines.yml composer.json composer.lock inc/beta.php
+              inc/beta-wpcli.php
+            - pipe: 'atlassian/sftp-deploy:0.6.0'
+              variables:
+                USER: $SSH_USER
+                SERVER: $SSH_SERVER
+                EXTRA_ARGS: '-oPort=16469'
+                REMOTE_PATH: public/wp-content/plugins/cshp-plugin-tracker
+                DEBUG: 'true'
+      - step:
+          name: Update plugin zip to Cornershop Plugin Recovery site
+          artifacts:
+            download: true
+          script:
+            - pipe: 'atlassian/sftp-deploy:0.6.0'
+              variables:
+                USER: $SSH_USER
+                SERVER: $SSH_SERVER
+                EXTRA_ARGS: '-oPort=16469'
+                REMOTE_PATH: public/plugin-releases/
+                LOCAL_PATH: cshp-plugin-tracker.zip
+                DEBUG: 'true'
