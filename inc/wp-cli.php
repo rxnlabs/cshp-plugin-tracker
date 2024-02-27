@@ -146,8 +146,8 @@ function command_theme_zip( $args, $assoc_args ) {
  * [--diff]
  * : Only download the premium plugins where the version that is on the live website is different than the version that is on current website. WARNING: this will overwrite the current plugins if a plugin on the current website is more up-to-date than the version on the live website. The version from the live website will overwrite the current version. More efficient than downloading all the premium plugins.
  *
- * [--force]
- * : Overwrite the current version of a premium plugin if the plugin is already installed
+ * [--no-overwrite]
+ * : Don't overwrite the current version of a premium plugin if the plugin is already installed. Useful if the version currently installed is newer than the version being downloaded.
  *
  * [--dry-run]
  * : Whether to actually install the plugins.
@@ -159,7 +159,7 @@ function command_plugin_install( $args, $assoc_args ) {
 	global $wp_filesystem;
 	global $dry_run;
 	$dry_run               = false;
-	$force                 = false;
+	$no_overwrite                 = false;
 	$premium_install       = false;
 	$specific_premium_plugins = [];
 	$global_params_string  = '';
@@ -187,20 +187,33 @@ function command_plugin_install( $args, $assoc_args ) {
 		$dry_run = true;
 	}
 
-	if ( isset( $assoc_args['force'] ) ) {
-		$force = true;
+	if ( isset( $assoc_args['no-overwrite'] ) ) {
+		$no_overwrite = true;
 	}
 
 	// add the CPR query string to the website URL that will prompt it try to identify if we are whitelisted on CPR
-	if ( isset( $assoc_args['bypass'] ) ) {
-		$premium_install = add_query_arg( [ 'cshp_pt_cpr' => true ], $premium_install );
+	$url = wp_parse_url( $premium_install );
+	// check if we are installing the premium plugins by passing a website URL and that we are not installing straight from a .zip file
+
+	if ( ! empty( $url ) && ! empty( $url['scheme'] ) && ! empty( $url['host'] ) && ! str_ends_with( $url['path'] ?? '', '.zip' ) ) {
+		$query_strings = [];
+		if ( ! empty( $url['query'] ) ) {
+			wp_parse_str( $url['query'], $query_strings );
+		}
+
+		if ( ! isset( $query_strings['token'] ) && ! isset( $query_strings['bypass'] ) ) {
+			$premium_install = add_query_arg( [ 'cshp_pt_cpr' => true ], $premium_install );
+		} elseif ( isset( $assoc_args['bypass'] ) ) {
+			$bypass = ! empty( $assoc_args['bypass'] ) ? $assoc_args['bypass'] : '';
+			$premium_install = add_query_arg( [ 'cshp_pt_cpr' => $bypass ], $premium_install );
+		}
 	}
 
 	if ( isset( $assoc_args['diff'] ) && isset( $assoc_args['not-exists'] ) ) {
-		WP_CLI::error( __( 'Cannot pass both flags --diff and --not-exists. You can only do one.', Plugin_Tracker\get_textdomain() ) );
+		\WP_CLI::error( __( 'Cannot pass both flags --diff and --not-exists. You can only do one.', Plugin_Tracker\get_textdomain() ) );
 	}
 
-	if ( isset( $assoc_args['diff'] ) || isset( $assoc_args['not-exists'] ) ) {
+	if ( ! empty( $url ) && isset( $assoc_args['diff'] ) || isset( $assoc_args['not-exists'] ) ) {
 		$plugins = get_plugins();
 		$installed_plugins = [];
 		foreach ( $plugins as $plugin_file => $data ) {
@@ -273,7 +286,7 @@ function command_plugin_install( $args, $assoc_args ) {
 				}
 			}
 		} else {
-			\WP_CLI::error( $return );
+			\WP_CLI::error( sprintf( __( 'Could not download install plugins due to error: %s', Plugin_Tracker\get_textdomain() ), $return ) );
 		}
 
 		$plugins_downloaded_list      = [];
@@ -296,13 +309,13 @@ function command_plugin_install( $args, $assoc_args ) {
 				try {
 					$premium_plugin_folder_name = basename( $file->getRealpath() );
 
-					if ( is_dir( $new_plugin_folder_path ) && false === $force ) {
+					if ( is_dir( $new_plugin_folder_path ) && true === $no_overwrite ) {
 						\WP_CLI::log( esc_html__( sprintf( 'The plugin %s is already installed. If you want to overwrite the currently installed version with the version from the premium plugins file, pass the --force flag to the command.', basename( $file->getRealpath() ) ), Plugin_Tracker\get_textdomain() ) );
 						$plugins_downloaded_list[] = basename( $premium_plugin_folder_name );
 						continue;
 					}
 
-					$result = $wp_filesystem->move( $file->getRealpath(), $new_plugin_folder_path, $force );
+					$result = $wp_filesystem->move( $file->getRealpath(), $new_plugin_folder_path, true );
 
 					if ( true === $result ) {
 						$plugins_downloaded_list[] = basename( $premium_plugin_folder_name );

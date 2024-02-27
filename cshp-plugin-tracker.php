@@ -4233,7 +4233,8 @@ function trigger_zip_download_with_site_key() {
 			$request = new \WP_REST_Request( 'GET', '/cshp-plugin-tracker/plugin/download' );
 		}
 
-		if ( ! empty( $key ) ) {
+        // make sure that were not just passed a true or a 1 for the key
+		if ( ! empty( $key ) && true !== filter_var( $key, FILTER_VALIDATE_BOOLEAN) ) {
 			$request->set_param( 'token', $key );
 		} else {
 			$request->set_param( 'bypass', '' );
