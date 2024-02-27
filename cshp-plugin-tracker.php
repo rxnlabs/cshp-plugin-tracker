@@ -2,7 +2,7 @@
 /*
 Plugin Name: Cornershop Plugin Tracker
 Plugin URI: https://cornershopcreative.com/
-Description: Keep track of the current versions of themes and plugins installed on a WordPress site. This plugin should <strong>ALWAYS be Active</strong> unless you are having an issue where this plugin is the problem. If you are having issues with this plugin, please contact Cornershop Creative's support.
+Description: Keep track of the current versions of themes and plugins installed on a WordPress site. This plugin should <strong>ALWAYS be Active</strong> unless you are having an issue where this plugin is the problem. If you are having issues with this plugin, please contact Cornershop Creative's support. If you are no longer a client of Cornershop Creative, this plugin is no longer required. You can deactivate and delete this plugin.
 Version: 1.1.0
 Text Domain: cshp-pt
 Author: Cornershop Creative
