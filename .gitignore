@@ -43,3 +43,4 @@ Thumbs.db
 
 # Project specific ignores
 composer-vendor/bin
+cshp-plugin-tracker.zip

@@ -398,7 +398,7 @@ function alter_plugin_install_activation_links( $action_links, $plugin ) {
 	}
 
 	if ( $is_cpr_plugin ) {
-		$action_links[] = sprintf( '<p>%1$s <a href="%2$s" rel="noopener">%3$s</a></p>', __( 'Activate this plugin on the plugins listing page <strong>after Installing</strong> this plugin. Due to how plugin installs work, you cannot activate this plugin on this screen. The plugin will be named <strong>Cornershop Premium Plugins</strong>', get_textdomain() ), esc_url( admin_url('plugins.php' ) ), __( 'Go to Plugins listing page', get_textdomain() ) );
+		$action_links[] = sprintf( '<p>%1$s <a href="%2$s" rel="noopener">%3$s</a></p>', __( 'Activate this plugin on the plugins listing page <strong>after Installing</strong> this plugin. The plugin will be named <strong>Cornershop Premium Plugins</strong>', get_textdomain() ), esc_url( admin_url('plugins.php' ) ), __( 'Go to Plugins listing page', get_textdomain() ) );
 	}
 
 	return $action_links;
