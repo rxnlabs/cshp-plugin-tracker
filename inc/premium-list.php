@@ -137,3 +137,17 @@ function premium_themes_list() {
 		'wihelp',
 	];
 }
+
+/**
+ * Exclude these internal plugins from being included in the plugins backup zip file.
+ *
+ * @return array List of plugin folder names to exclude.
+ */
+function exclude_plugins_list() {
+	return [
+		'cshp-plugin-tracker',
+		'cshp-support',
+		'cshp-plugin-backup',
+		'cshp-plugin-updater'
+	];
+}

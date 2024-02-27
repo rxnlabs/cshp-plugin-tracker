@@ -478,8 +478,8 @@ function create_archive_post_type() {
 			],
 			'public'                => false,
 			'hierarchical'          => false,
-			'show_ui'               => true,
-			'show_in_nav_menus'     => true,
+			'show_ui'               => false,
+			'show_in_nav_menus'     => false,
 			'supports'              => [ 'title', 'editor', 'custom-fields', 'author' ],
 			'has_archive'           => false,
 			'rewrite'               => true,
@@ -648,7 +648,6 @@ function delete_archive_file( $post_id, $previous_status = '' ) {
     }
 
 	wp_delete_file( get_archive_zip_file( $post_id ) );
-    wp_delete_post( $post_id, true );
 
     $post_type_data = get_post_type_object( get_archive_post_type() );
     // if we are in the admin area of the site when the post was deleted, redirect the user to the list of other archives
@@ -846,6 +845,7 @@ function get_archive_post_by_contents( $archived_plugins ) {
 					'taxonomy' => get_archive_taxonomy(),
 					'field'    => 'slug',
 					'terms'    => $archived_plugins,
+                    'operator' => 'AND', // make sure we ae finding the posts that have all of these exact terms
 				],
 			],
 		]
@@ -909,6 +909,39 @@ function get_archive_zip_file_by_contents( $archived_plugins ) {
 }
 
 /**
+ * Check if the zipped up plugins in an archive zip are old by comparing the version numbers of the zip plugins with the version numbers of the current plugins.
+ *
+ * @param int|\WP_Post $archive_post
+ *
+ * @return bool True if the archive is old and should be deleted. False if the archive is up to date.
+ */
+function is_archive_zip_old( $archive_post ) {
+    $plugins = get_premium_plugin_zip_file_contents( $archive_post );
+    $is_archive_old = false;
+
+    if ( ! empty( $plugins ) ) {
+        $plugins = json_decode( $plugins, true );
+        if ( ! empty( $plugins ) ) {
+            foreach ( $plugins as $plugin => $version ) {
+                $plugin_data = get_plugins( '/' . $plugin );
+                // if any saved plugin version is not the same as the curret plugin version, the archive is old.
+
+                if ( ! empty( $plugin_data ) ) {
+                    // traverse the plugin data since the key that is returned is the plugin file name
+                    $plugin_data = $plugin_data[array_key_first( $plugin_data )];
+
+	                if ( ! empty( $plugin_data['Version'] ) && $plugin_data['Version'] !== $version ) {
+		                $is_archive_old = true;
+		                break;
+                    }
+                }
+            }
+        }
+    }
+
+    return $is_archive_old;
+}
+/**
  * Get the path to the premium theme download zip file.
  *
  * @return false|string|null Path of the zip file on the server or empty if no zip file.
@@ -920,23 +953,40 @@ function get_premium_theme_zip_file() {
 /**
  * Get the list of plugin folders and plugin versions that were saved to the last generated premium plugins zip file.
  *
+ * @param string $archive_zip_file_name_or_archive_zip_post Name of the zip file, post ID of the archive zip post object or the archive post object.
+ *
  * @return false|array|null Name of plugin folders and versions that were saved to the last generated premium plugins
  * zip file.
  */
-function get_premium_plugin_zip_file_contents( $archive_zip_file_name = '' ) {
+function get_premium_plugin_zip_file_contents( $archive_zip_file_name_or_archive_zip_post = '' ) {
     $plugin_zip_contents = '';
 
-    if ( ! empty( $archive_zip_file_name ) ) {
-        $archive_zip_post = get_archive_post_by_zip_filename( $archive_zip_file_name );
+    if ( $archive_zip_file_name_or_archive_zip_post instanceof \WP_Post ) {
+        $archive_zip_post = $archive_zip_file_name_or_archive_zip_post;
+    } elseif ( is_int( $archive_zip_file_name_or_archive_zip_post ) ) {
+        $archive_zip_post = new \WP_Query( [
+            'post_type' => get_archive_post_type(),
+            'p' => $archive_zip_file_name_or_archive_zip_post,
+            'no_found_rows' => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+            'posts_per_page' => 1,
+        ] );
 
-        if ( ! empty( $archive_zip_post ) ) {
-            $plugin_zip_contents = get_post_meta( $archive_zip_post->ID, 'cshp_plugin_tracker_archived_plugins', true );
+        if ( ! is_wp_error( $archive_zip_post ) && $archive_zip_post->have_posts() ) {
+            $archive_zip_post = $archive_zip_post[0];
         }
+    } elseif ( ! empty( $archive_zip_file_name_or_archive_zip_post ) && is_string( $archive_zip_file_name_or_archive_zip_post ) ) {
+        $archive_zip_post = get_archive_post_by_zip_filename( $archive_zip_file_name_or_archive_zip_post );
     }
 
-    if ( empty( $plugin_zip_contents ) ) {
-	    $plugin_zip_contents = get_option( 'cshp_plugin_tracker_plugin_zip_contents', [] );
-    }
+	if ( ! empty( $archive_zip_post ) ) {
+		$plugin_zip_contents = get_post_meta( $archive_zip_post->ID, 'cshp_plugin_tracker_archived_plugins', true );
+
+		if ( empty( $plugin_zip_contents ) ) {
+			$plugin_zip_contents = get_option( 'cshp_plugin_tracker_plugin_zip_contents', [] );
+		}
+	}
 
 	return $plugin_zip_contents;
 }
@@ -968,7 +1018,10 @@ function get_stored_token() {
 function get_excluded_plugins() {
 	$list = get_option( 'cshp_plugin_tracker_exclude_plugins', [] );
 	// always exclude this plugin from being included in the list of plugins to zip
-	$list[] = get_this_plugin_folder();
+	$list = array_merge( $list, exclude_plugins_list() );
+
+    // allow custom code to filter the plugins that are excluded
+    $list = apply_filters( 'cshp_pt_exclude_plugins', $list );
 
 	return $list;
 }
@@ -1404,7 +1457,7 @@ function is_theme_available( $theme_slug, $version = '' ) {
  */
 function is_premium_plugin( $plugin_folder_name_or_main_file ) {
 	$plugin_path_file = $plugin_folder_name_or_main_file;
-
+    $composer_file = get_tracker_file();
 	if ( ! file_exists( $plugin_path_file ) ) {
 		$plugin_path_file = get_plugin_file_full_path( $plugin_path_file );
 	}
@@ -1414,6 +1467,19 @@ function is_premium_plugin( $plugin_folder_name_or_main_file ) {
 		$plugin_folder_name = basename( dirname( $plugin_path_file ) );
 		$version_check      = isset( $data['Version'] ) ? $data['Version'] : '';
 
+        // check the composer.json file and check if the file has been modified within the past week. If a plugin was marked as being public within the past week, then it is more than likely still available on wordpress.org
+        // this prevents us from pinging wasting resources pinging the wordpress.org API and acts like a cache
+        if ( is_file( $composer_file ) && time() - filemtime( $composer_file ) < WEEK_IN_SECONDS ) {
+            $composer_file_array = wp_json_file_decode( $composer_file, [ 'associative' => true ] );
+
+            $check_is_public = sprintf( 'wpackagist-plugin/%s', $plugin_folder_name );
+	        $check_is_premium = sprintf( 'premium-plugin/%s', $plugin_folder_name );
+            if ( isset( $composer_file_array['require'][$check_is_public] ) ) {
+                return false;
+            } elseif ( isset( $composer_file_array['require'][$check_is_premium] ) ) {
+                return true;
+            }
+        }
 		if ( is_update_disabled( $plugin_data ) || ! is_plugin_available( $plugin_folder_name, $version_check ) ) {
 			return true;
 		}
@@ -1660,142 +1726,24 @@ function create_zip( $zip_path, $folder_paths = [], $additional_files = [] ) {
 }
 
 /**
- * Zip up the plugins that are not available on wordpress.org
- *
- * @param string $zip_name File name of the plugins .zip file.
- *
- * @return string Path to the premium plugins zip file or error message if the zip file cannot be created.
- */
-function zip_premium_plugins( $zip_name = '' ) {
-	$plugins                   = get_active_plugins();
-	$excluded_plugins          = get_excluded_plugins();
-	$message                   = '';
-	$zip_include_plugins       = [];
-	$plugin_composer_data_list = [];
-	$saved_plugins_list        = [];
-	$plugin_zip_contents       = [];
-
-	foreach ( generate_composer_installed_plugins() as $plugin_folder_name => $plugin_version ) {
-		$clean_folder_name                               = str_replace( [ 'premium-plugin/', 'wpackagist-plugin/' ], '', $plugin_folder_name );
-		$plugin_composer_data_list[ $clean_folder_name ] = $plugin_version;
-	}
-
-	if ( class_exists( '\ZipArchive' ) ) {
-		// if we are using WP CLI, allow the zip of plugins to be generated multiple times
-		if ( ! is_wp_cli_environment() ) {
-			if ( does_zip_exists( get_premium_plugin_zip_file() ) && ! is_plugin_zip_old() ) {
-				log_request( 'plugin_zip_download' );
-				return get_premium_plugin_zip_file();
-			} else {
-				log_request( 'plugin_zip_download', __( 'Attempt download but plugin zip does not exists or has not been generated lately. Generate zip.', get_textdomain() ) );
-			}
-		}
-
-		if ( ! is_wp_error( create_plugin_uploads_folder() ) && ! empty( create_plugin_uploads_folder() ) ) {
-			$generate_zip_name = sprintf( 'plugins-%s.zip', wp_generate_uuid4() );
-
-			if ( empty( $zip_name ) || ! is_string( $zip_name ) ) {
-				$zip_name = $generate_zip_name;
-			}
-
-			if ( '.zip' !== substr( $zip_name, -4 ) ) {
-				$zip_name .= '.zip';
-			}
-
-			$zip_path = sprintf( '%s/%s', create_plugin_uploads_folder(), $zip_name );
-			log_request( 'plugin_zip_start' );
-			foreach ( $plugins as $plugin ) {
-				$plugin_folder_name      = dirname( $plugin );
-				$plugin_folder_path_file = get_plugin_file_full_path( $plugin );
-				$plugin_folder_path      = get_plugin_file_full_path( dirname( $plugin ) );
-
-				// prevent this plugin from being included in the premium plugins zip file
-				// exclude plugins that we explicitly don't want to download
-				if ( $plugin_folder_name === get_this_plugin_folder() || in_array( $plugin_folder_name, $excluded_plugins, true ) ) {
-					continue;
-				}
-
-				// if the plugin has disabled updates, include it in the list of premium plugins
-				// only zip up plugins that are not available on WordPress.org
-				if ( in_array( $plugin_folder_name, premium_plugins_list(), true ) || is_premium_plugin( $plugin_folder_path_file ) ) {
-					$zip_include_plugins[] = $plugin_folder_path;
-					$saved_plugins_list[]  = $plugin_folder_name;
-				}
-			}//end foreach
-
-			if ( empty( $zip_include_plugins ) ) {
-				$message = __( 'No premium plugins are active on the site. If there are premium plugins, they may be excluded from downloading by the plugin settings.', get_textdomain() );
-			}
-
-			if ( ! empty( $zip_include_plugins ) ) {
-				$additional_files = [];
-				// include a main plugin file in the zip so we can install the premium plugins
-				$plugin_file = sprintf( '%s/scaffold/cshp-premium-plugins.php', __DIR__ );
-
-				if ( file_exists( $plugin_file ) ) {
-					// add the plugin file to the root of the zip file rather than as the entire path of the file
-					$additional_files[] = [ $plugin_file, basename( $plugin_file ) ];
-				}
-
-                // include the generated composer.json file that keeps track of the plugins installed, so we can activate the premium plugins after they are installed.
-                if ( file_exists( get_tracker_file() ) ) {
-                    $additional_files[] = [ get_tracker_file(), basename( get_tracker_file() ) ];
-                }
-
-				$zip_result = create_zip( $zip_path, $zip_include_plugins, $additional_files );
-				if ( does_zip_exists( $zip_result ) ) {
-					// generate the composer tracker file just in case it has not been updated since before the tracker
-					// file was created
-					create_plugin_tracker_file();
-					save_plugin_zip_file( $zip_path );
-					foreach ( $saved_plugins_list as $plugin_folder ) {
-						if ( isset( $plugin_composer_data_list[ $plugin_folder ] ) ) {
-							$plugin_zip_contents[ $plugin_folder ] = $plugin_composer_data_list[ $plugin_folder ];
-						}
-					}
-
-					ksort( $plugin_zip_contents );
-
-					save_plugin_zip_file_contents( $plugin_zip_contents );
-					log_request( 'plugin_zip_create_complete' );
-					log_request( 'plugin_zip_download' );
-					return get_premium_plugin_zip_file();
-				} else {
-					$message = $zip_result;
-					log_request( 'plugin_zip_error', $message );
-				}//end if
-			}//end if
-		} else {
-			$message = __( 'Error: Ziparchive PHP class does not exist or the PHP zip module is not installed', get_textdomain() );
-			log_request( 'plugin_zip_error', $message );
-		}//end if
-	} else {
-		$message = __( 'Error: Ziparchive PHP class does not exist or the PHP zip module is not installed', get_textdomain() );
-		log_request( 'plugin_zip_error', $message );
-	}//end if
-
-	return $message;
-}
-
-/**
  * Zip up the specified plugins that are not available on wordpress.org
  *
  * @param  array  $only_include_plugins  List of premium plugins that should only be in the zip.
  * @param bool $include_all_plugins Include all plugins regardless if the plugin is active. By default, the generated archive only includes plugins that are activated.
- * @param bool $include_plugin_tracker Include the plugin tracker plugin in the zip as well.
  * @param string $zip_name File name of the plugins .zip file.
  *
  * @return string Path to the premium plugins zip file or error message if the zip file cannot be created.
  */
-function zip_premium_plugins_include( $only_include_plugins = [], $include_all_plugins = false, $include_plugin_tracker = false, $zip_name = '' ) {
+function zip_premium_plugins_include( $only_include_plugins = [], $include_all_plugins = false, $zip_name = '' ) {
 	$included_plugins = get_active_plugins();
-	$excluded_plugins          = get_excluded_plugins();
 	$message                   = '';
 	$zip_include_plugins       = [];
 	$plugin_composer_data_list = [];
 	$saved_plugins_list        = [];
 	$plugin_zip_contents       = [];
-    $find_archive_file = get_archive_zip_file_by_contents( $included_plugins );
+    $premium_plugin_folder_names = [];
+    // remove the active plugin file name and just get the name of the plugin folder
+    $active_plugin_folder_names = array_map( 'dirname', $included_plugins );
 
     // if we want all plugins, then get all plugins
     if ( true === $include_all_plugins && empty( $only_include_plugins ) ) {
@@ -1806,19 +1754,26 @@ function zip_premium_plugins_include( $only_include_plugins = [], $include_all_p
 
 	foreach ( generate_composer_installed_plugins() as $plugin_folder_name => $plugin_version ) {
 		$clean_folder_name                               = str_replace( [ 'premium-plugin/', 'wpackagist-plugin/' ], '', $plugin_folder_name );
+
+        if ( str_contains( $plugin_folder_name, 'premium-plugin' ) ) {
+            $premium_plugin_folder_names[] = $clean_folder_name;
+        }
+
 		$plugin_composer_data_list[ $clean_folder_name ] = $plugin_version;
 	}
 
+	$active_premium_plugin_folder_names = array_intersect( $premium_plugin_folder_names, $active_plugin_folder_names );
+	// remove the excluded plugins if they are active
+	$active_premium_plugin_folder_names = array_diff( $active_premium_plugin_folder_names, get_excluded_plugins() );
+	$find_archive_file = get_archive_zip_file_by_contents( $active_premium_plugin_folder_names );
+
 	if ( class_exists( '\ZipArchive' ) ) {
-		// if we are using WP CLI, allow the zip of plugins to be generated multiple times
-		if ( ! is_wp_cli_environment() ) {
-			if ( does_zip_exists( $find_archive_file ) ) {
-				log_request( 'plugin_zip_download' );
-				return $find_archive_file;
-			} else {
-				log_request( 'plugin_zip_download', __( 'Attempt download but plugin zip does not exists or has not been generated lately. Generate zip.', get_textdomain() ) );
-			}
-		}
+        if ( does_zip_exists( $find_archive_file ) && ! is_archive_zip_old( wp_basename( $find_archive_file ) ) ) {
+            log_request( 'plugin_zip_download', '', $find_archive_file );
+            return $find_archive_file;
+        } else {
+            log_request( 'plugin_zip_download', __( 'Attempt download but plugin zip does not exists or has not been generated lately. Generate zip.', get_textdomain() ) );
+        }
 
 		if ( ! is_wp_error( create_plugin_uploads_folder() ) && ! empty( create_plugin_uploads_folder() ) ) {
 			$generate_zip_name = sprintf( 'plugins-%s.zip', wp_generate_uuid4() );
@@ -1838,14 +1793,8 @@ function zip_premium_plugins_include( $only_include_plugins = [], $include_all_p
 				$plugin_folder_path_file = get_plugin_file_full_path( $plugin );
 				$plugin_folder_path      = get_plugin_file_full_path( dirname( $plugin ) );
 
-				// prevent this plugin from being included in the premium plugins zip file unless
-                // we explicitly want it included
-                if ( true !== $include_plugin_tracker && $plugin_folder_name === get_this_plugin_folder() ) {
-                    continue;
-                }
-
 				// exclude plugins that we explicitly don't want to download
-				if ( in_array( $plugin_folder_name, $excluded_plugins, true ) ) {
+				if ( in_array( $plugin_folder_name, get_excluded_plugins(), true ) ) {
 					continue;
 				}
 
@@ -1867,16 +1816,26 @@ function zip_premium_plugins_include( $only_include_plugins = [], $include_all_p
 				$plugin_file = sprintf( '%s/scaffold/cshp-premium-plugins.php', __DIR__ );
 				if ( file_exists( $plugin_file ) ) {
 					// add the plugin file to the root of the zip file rather than as the entire path of the file
-					$additional_files[] = [ $plugin_file, basename( $plugin_file ) ];
+					$additional_files[] = [ $plugin_file, wp_basename( $plugin_file ) ];
 				}
 
 				// include the generated composer.json file that keeps track of the plugins installed, so we can activate the premium plugins after they are installed.
-				if ( file_exists( get_tracker_file() ) ) {
-					$additional_files[] = [ get_tracker_file(), basename( get_tracker_file() ) ];
+				if ( is_file( get_tracker_file() ) ) {
+					$additional_files[] = [ get_tracker_file(), wp_basename( get_tracker_file() ) ];
 				}
+
+                // if we have a list of plugins that we want zipped up, check again to make sure that a zip of these plugins does not already exist
+				$plugins_to_zip = array_map( 'wp_basename', $zip_include_plugins );
+                $find_archive_file = get_archive_zip_file_by_contents( $plugins_to_zip );
+
+                if ( does_zip_exists( $find_archive_file ) && ! is_archive_zip_old( wp_basename( $find_archive_file ) ) ) {
+                    log_request( 'plugin_zip_download', '', $find_archive_file );
+                    return $find_archive_file;
+                }
 
 				$zip_result = create_zip( $zip_path, $zip_include_plugins, $additional_files );
 				if ( does_zip_exists( $zip_result ) ) {
+                    // generate the data about the saved zip contents with the name of the plugins included and the versions of the plugins included
 					foreach ( $saved_plugins_list as $plugin_folder ) {
 						if ( isset( $plugin_composer_data_list[ $plugin_folder ] ) ) {
 							$plugin_zip_contents[ $plugin_folder ] = $plugin_composer_data_list[ $plugin_folder ];
@@ -2037,7 +1996,7 @@ function does_zip_exists( $zip_file_path ) {
     }
 
 	// use the native PHP functions instead of the WP Filesystem API method $wp_filesystem->exists
-	// $wp_filesytem->exists throws errors on FTP FS https://github.com/pods-framework/pods/issues/6242
+	// $wp_filesystem->exists throws errors on FTP FS https://github.com/pods-framework/pods/issues/6242
 	return file_exists( $zip_file_path );
 }
 
@@ -2065,6 +2024,7 @@ function add_rewrite_query_vars( $vars ) {
 			'cshp_plugin_tracker',
 			'cshp_plugin_tracker_action',
             'cshp_pt_cpr',
+            'cshp_pt_plugins'
 		],
 		$vars
 	);
@@ -2159,19 +2119,27 @@ function is_authorized( $token = '' ) {
  */
 function download_plugin_zip_rest( $request ) {
 	$passed_token = trim( sanitize_text_field( $request->get_param( 'token' ) ) );
-	$plugins = $request->get_param( 'plugins' );
+	$try_whitelist_bypass = $request->has_param( 'bypass' );
+    $diff_only = $request->has_param( 'diff' );
+    $not_exists = $request->has_param( 'not_exists' );
+    $skip_plugins = [];
 	$zip_all_plugins = true === boolval( sanitize_text_field( $request->get_param( 'include_all_plugins' ) ) );
-    $zip_plugin_tracker = true === boolval( sanitize_text_field( $request->get_param( 'include_plugin_tracker' ) ) );
+    $plugins = $request->get_param( 'plugins' );
 	$clean_plugins = [];
 
+    if ( empty( $passed_token ) && ! $try_whitelist_bypass ) {
+        log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
+        return new \WP_REST_Response(
+            [
+                'error'   => true,
+                'message' => esc_html__( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() ),
+            ],
+            403
+        );
+    }
+
 	if ( ! is_authorized( $passed_token ) ) {
-        $message = '';
-
-        if ( empty( $passed_token ) ) {
-            $message = sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() );
-        }
-
-		log_request( 'token_verify_fail', $message );
+		log_request( 'token_verify_fail', __( 'Token passed is not authorized or the user is attempting a whitelist bypass and the IP address is not whitelisted', get_textdomain() ) );
 		return new \WP_REST_Response(
 			[
 				'error'   => true,
@@ -2183,15 +2151,48 @@ function download_plugin_zip_rest( $request ) {
 
     // if we passed plugins that we want archived, sanitize the passed query arguments
     if ( ! empty( $plugins ) ) {
-	    foreach ( $plugins as $plugin ) {
-            $clean_plugin = trim( sanitize_text_field( $plugin ) );
-            if ( ! empty( $clean_plugin ) ) {
-                $clean_plugins[] = $clean_plugin;
-            }
-        }
+	    foreach ( $plugins as $plugin_name => $version ) {
+		    $plugin_name = sanitize_text_field( $plugin_name );
+		    $plugin_version = sanitize_text_field( $version );
+
+		    if ( ! empty( $plugin_name ) ) {
+                // if we passed the plugin version, then compare the passed plugin version to the one installed on this website.
+                if ( $diff_only && ! empty( $plugin_version ) ) {
+                    $currently_installed_plugin = get_plugins( '/' . $plugin_name );
+
+                    // if the plugin was found, the information is indexed by the plugin file name
+                    if ( ! empty( $currently_installed_plugin ) ) {
+                        $plugin_file = array_key_first( $currently_installed_plugin );
+                        $currently_installed_plugin = $currently_installed_plugin[ $plugin_file ];
+
+	                    // if the passed version is the same as the live version, skip zipping this plugin
+	                    if ( ! empty( $currently_installed_plugin['Version'] ) && $currently_installed_plugin['Version'] === $version ) {
+		                    $skip_plugins[] = $plugin_name;
+		                    continue;
+	                    }
+                    }
+                }
+
+			    $clean_plugins[] = $plugin_name;
+		    }
+	    }
     }
 
-	$zip_file_result = zip_premium_plugins_include( $clean_plugins, $zip_all_plugins, $zip_plugin_tracker );
+	// if we only want to download plugins that don't exist on the other website based on what was passed into this request, then exclude the plugins that were passed
+    if ( $not_exists && ! empty( $clean_plugins ) ) {
+	    add_filter( 'cshp_pt_exclude_plugins', function( $plugin_folders ) use ( $clean_plugins ) {
+		    return array_merge( $plugin_folders, $clean_plugins );
+	    }, 10 );
+        $clean_plugins = [];
+    } elseif ( $diff_only && ! empty( $skip_plugins ) ) {
+        // exclude the plugins where the version number passed in the request matches the version installed on this website
+	    add_filter( 'cshp_pt_exclude_plugins', function( $plugin_folders ) use ( $skip_plugins ) {
+		    return array_merge( $plugin_folders, $skip_plugins );
+	    }, 10 );
+        $clean_plugins = [];
+    }
+
+	$zip_file_result = zip_premium_plugins_include( $clean_plugins, $zip_all_plugins );
 
     if ( does_zip_exists( $zip_file_result ) ) {
 	    send_premium_plugins_zip_for_download( $zip_file_result );
@@ -2221,15 +2222,21 @@ function download_plugin_zip_rest( $request ) {
  */
 function download_theme_zip_rest( $request ) {
 	$passed_token = trim( sanitize_text_field( $request->get_param( 'token' ) ) );
+    $try_whitelist_bypass = $request->has_param( 'bypass' );
+
+	if ( empty( $passed_token ) && ! $try_whitelist_bypass ) {
+		log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
+		return new \WP_REST_Response(
+			[
+				'error'   => true,
+				'message' => esc_html__( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() ),
+			],
+			403
+		);
+	}
 
 	if ( ! is_authorized( $passed_token ) ) {
-		$message = '';
-
-		if ( empty( $passed_token ) ) {
-			$message = sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() );
-		}
-
-		log_request( 'token_verify_fail', $message );
+		log_request( 'token_verify_fail', __( 'Token passed is not authorized or the user is attempting a whitelist bypass and the IP address is not whitelisted', get_textdomain() ) );
 		return new \WP_REST_Response(
 			[
 				'error'   => true,
@@ -2273,18 +2280,20 @@ function download_plugin_zip_rewrite( &$query ) {
 		 && 'download' === $query->query_vars['cshp_plugin_tracker_action'] ) {
 
 		$passed_token = trim( sanitize_text_field( $_GET['token'] ) );
-		$plugins = $_GET['plugins'];
+        $try_whitelist_bypass = isset( $_GET['bypass'] );
+		$plugins = $_GET['cshp_pt_plugins'];
 		$clean_plugins = [];
 
-		if ( ! is_authorized( $passed_token ) ) {
-			$message = '';
-
-			if ( empty( $passed_token ) ) {
-				$message = sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() );
-			}
-
+		if ( empty( $passed_token ) && ! $try_whitelist_bypass ) {
+			log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
 			http_response_code( 403 );
-			log_request( 'token_verify_fail', $message );
+			esc_html_e( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() );
+			exit;
+		}
+
+		if ( ! is_authorized( $passed_token ) ) {
+			log_request( 'token_verify_fail', __( 'Token passed is not authorized or the user is attempting a whitelist bypass and the IP address is not whitelisted', get_textdomain() ) );
+			http_response_code( 403 );
 			esc_html_e( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() );
 			exit;
 		}
@@ -2329,16 +2338,18 @@ function download_theme_zip_rewrite( &$query ) {
 		 && 'download' === $query->query_vars['cshp_plugin_tracker_action'] ) {
 
 		$passed_token = trim( sanitize_text_field( $_GET['token'] ) );
+        $try_whitelist_bypass = isset( $_GET['bypass'] );
+
+		if ( empty( $passed_token ) && ! $try_whitelist_bypass ) {
+			log_request( 'token_verify_fail', sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() ) );
+			http_response_code( 403 );
+			esc_html_e( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() );
+			exit;
+		}
 
 		if ( ! is_authorized( $passed_token ) ) {
-			$message = '';
-
-			if ( empty( $passed_token ) ) {
-				$message = sprintf( __( 'No token passed by IP address %s', get_textdomain() ), get_request_ip_address() );
-			}
-
+			log_request( 'token_verify_fail', __( 'Token passed is not authorized or the user is attempting a whitelist bypass and the IP address is not whitelisted', get_textdomain() ) );
 			http_response_code( 403 );
-			log_request( 'token_verify_fail', $message );
 			esc_html_e( 'Token is not authorized. You must pass a token for this request or your IP address needs to be whitelisted', get_textdomain() );
 			exit;
 		}
@@ -2524,10 +2535,11 @@ function is_theme_zip_old() {
  *
  * @param string $type Type of message to log. Should be slug of the log custom taxonomy.
  * @param string $message Custom message to override the default message.
+ * @param string $archive_zip_url URL to the archive zip that was downloaded
  *
  * @return int Post ID of the log post
  */
-function log_request( $type, $message = '' ) {
+function log_request( $type, $message = '', $archive_zip_url = '' ) {
 	global $wp;
 	$get_clean      = [];
 	$result_post_id = 0;
@@ -2565,7 +2577,13 @@ function log_request( $type, $message = '' ) {
 			if ( false !== strpos( $type, 'token_' ) ) {
 				$title = sprintf( '%s %s', $title, get_stored_token() );
 			} elseif ( false !== strpos( $type, 'plugin_zip' ) ) {
-				$title = sprintf( '%s %s', $title, get_premium_plugin_zip_file() );
+                $zip_file = get_premium_plugin_zip_file();
+
+                if ( ! empty( $archive_zip_url ) ) {
+                    $zip_file = $archive_zip_url;
+                }
+
+				$title = sprintf( '%s %s', $title, $zip_file );
 			} elseif ( false !== strpos( $type, 'theme_zip' ) ) {
 				$title = sprintf( '%s %s', $title, get_premium_theme_zip_file() );
 			} elseif ( in_array( $type, $use_message_for_title, true ) ) {
@@ -4149,35 +4167,108 @@ function is_development_mode() {
 /**
  * Delete the old versions of archived posts and archive files when they are out of date versus the currently installed versions.
  *
+ * This occurs during a cron job.
+ *
  * @return void
  */
 function delete_old_archive_posts() {
-    $composer_data = read_tracker_file();
+    $plugins  = get_plugins();
+    $plugin_folder_data = [];
+    foreach ( $plugins as $plugin_folder_file => $plugin_data ) {
+        $plugin_folder = dirname( $plugin_folder_file );
+        $plugin_folder_data[$plugin_folder] = $plugin_data;
+    }
 
-	foreach ( $composer_data['require'] as $plugin_key => $current_plugin_version ) {
-		if ( false === strpos( $plugin_key, 'premium-plugin' ) ) {
-			continue;
+    $archive_posts = new \WP_Query( [
+        'post_type' => get_archive_post_type(),
+        'post_status' => 'private',
+        'posts_per_page' => 100,
+        'no_found_rows' => true,
+        'update_post_meta_cache' => false,
+        'update_post_term_cache' => false,
+        'fields' => 'ids',
+    ] );
+
+    if ( $archive_posts->have_posts() ) {
+	    foreach ( $archive_posts->posts as $post_id ) {
+		    $saved_plugin_data = get_post_meta( $post_id, 'cshp_plugin_tracker_archived_plugins', true );
+
+		    try {
+			    $saved_plugin_data = json_decode( $saved_plugin_data, true );
+			    foreach ( $saved_plugin_data as $plugin_folder_name => $version ) {
+                    $should_delete = false;
+                    // if an archive has a plugin that is no longer installed, delete it
+                    if ( ! isset( $plugin_folder_data[$plugin_folder_name] ) ) {
+	                    $should_delete = true;
+                    }
+
+                    // if the plugin version that is archived is not the same version that is currently installed, delete it
+                    if ( $version !== $plugin_folder_data[$plugin_folder_name]['Version'] ) {
+	                    $should_delete = true;
+                    }
+
+                    $should_delete && wp_delete_post( $post_id, true );
+                }
+		    } catch ( \Exception $e ) {}
+        }
+    }
+}
+
+/**
+ * Redirect the user to the REST endpoint when they request to website using a special url parameter that will trigger the downloading of the plugins from the website.
+ * @return void
+ */
+function trigger_zip_download_with_site_key() {
+	if ( isset( $_GET['cshp_pt_cpr'] ) ) {
+		$key = sanitize_text_field( $_GET['cshp_pt_cpr'] );
+		$type = 'plugin';
+		$plugins = ! empty( $_GET['cshp_pt_plugins'] ) ? $_GET['cshp_pt_plugins'] : '';
+		$diff = isset( $_GET['cshp_pt_diff'] );
+		$not_exists = isset( $_GET['cshp_pt_not_exists'] );
+		$clean_plugins = [];
+
+		if ( 'theme' === $type ) {
+			$request = new \WP_REST_Request( 'GET', '/cshp-plugin-tracker/theme/download' );
+		} else {
+			$request = new \WP_REST_Request( 'GET', '/cshp-plugin-tracker/plugin/download' );
 		}
 
-		$plugin_folder_name = str_replace( 'premium-plugin/', '', $plugin_key );
+		if ( ! empty( $key ) ) {
+			$request->set_param( 'token', $key );
+		} else {
+			$request->set_param( 'bypass', '' );
+		}
 
-        $archive_posts = get_archive_post_by_contents( $plugin_folder_name );
+		if ( ! empty( $plugins ) ) {
+			foreach ( $plugins as $plugin_name => $version ) {
+				$plugin_name = sanitize_text_field( $plugin_name );
+				$plugin_version = sanitize_text_field( $version );
 
-        if ( ! empty( $archive_posts ) ) {
-            foreach ( $archive_posts as $post ) {
-                $saved_plugin_data = get_post_meta( $post->ID, 'cshp_plugin_tracker_archived_plugins', true );
+				if ( ! empty( $plugin_name ) ) {
+					$clean_plugins[$plugin_name] = ! empty( $plugin_version ) ? $plugin_version : '';
+				}
+			}
 
-                try {
-                    $saved_plugin_data = json_decode( $saved_plugin_data, true );
-                    // if the version of the plugin that was archived is not the same as the currently installed version, delete the archive post and the archive file.
-                    if ( $current_plugin_version !== $saved_plugin_data[$plugin_folder_name] ) {
-                        wp_delete_post( $post->ID, true );
-                    }
-                } catch ( \Exception $e ) {}
-            }
-        }
+			if ( ! empty( $clean_plugins ) )  {
+				$request->set_param( 'plugins', $clean_plugins );
+			}
+		}
+
+		if ( $diff ) {
+			$request->set_param( 'diff', '' );
+		} elseif ( $not_exists ) {
+			$request->set_param( 'not_exists', '' );
+		}
+
+		$url = add_query_arg( $request->get_query_params(), get_rest_url( null, $request->get_route() ) );
+
+		if ( ! empty( $url ) ) {
+			wp_safe_redirect( $url, 302 );
+			exit;
+		}
 	}
 }
+add_action( 'init', __NAMESPACE__ . '\trigger_zip_download_with_site_key' );
 
 /**
  * Get the full path to a wp-content/plugins folder.
