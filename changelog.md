@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0] - 2024-02-27
+
+### Added
+
+- Added the ability to selectively install the premium plugins using the WP CLI command `wp cshp-pt plugin-install`
+- Added the ability to search for and install plugin backups from the Cornershop Plugin Recovery website from the WordPress admin.
+- Added the ability to create multiple versions of the premium plugins archive for different plugins. Instead of a backup containing all plugins, a backup can contain specific plugins if not all plugins are needed by the requesting website.
+
 ## [1.0.32] - 2023-10-04
 
 ### Added
