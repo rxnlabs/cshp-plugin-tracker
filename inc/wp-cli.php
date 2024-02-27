@@ -133,11 +133,18 @@ function command_theme_zip( $args, $assoc_args ) {
  * : Path to the premium plugins zip file or URL to download the premium plugins zip file
  *
  * [<premium_plugin_folder_name>...]
- * : One or more premium plugins to install separated by a space. Use if you want to install only some of the premium plugins but not all of the premium plugins.
+ * : One or more premium plugins to install separated by a space. Use if you want to install only some of the premium plugins but not all the premium plugins.
  *
  * ## OPTIONS
- * [--site-key]
- * : Pass the site key that is used to download the premium plugins from a website without having to generate a token on the live website.
+ *
+ * [--bypass]
+ * : Is the IP address we are running this command from is whitelisted for Cornershop Plugin Recovery or are we using a site key. If valid, then download the current premium plugins from the source website without needing to generate a token on that source website first.
+ *
+ * [--not-exists]
+ * : Only download the premium plugins that are NOT on this website, regardless of the version. Useful if you don't really care about the version of a plugin that you are using on this website, as long plugin exist. More efficient than downloading all the premium plugins.
+ *
+ * [--diff]
+ * : Only download the premium plugins where the version that is on the live website is different than the version that is on current website. WARNING: this will overwrite the current plugins if a plugin on the current website is more up-to-date than the version on the live website. The version from the live website will overwrite the current version. More efficient than downloading all the premium plugins.
  *
  * [--force]
  * : Overwrite the current version of a premium plugin if the plugin is already installed
@@ -173,7 +180,7 @@ function command_plugin_install( $args, $assoc_args ) {
 
 	// if we have passed specific plugins that we want to install, pass those plugins as arguments to pass to the live site so it only zips the passed plugins
 	if ( ! empty( $premium_install ) && ! empty( $specific_premium_plugins ) ) {
-		$premium_install = add_query_arg( [ 'plugins' => $specific_premium_plugins ], $premium_install );
+		$premium_install = add_query_arg( [ 'cshp_pt_plugins' => $specific_premium_plugins ], $premium_install );
 	}
 
 	if ( isset( $assoc_args['dry-run'] ) ) {
@@ -182,6 +189,33 @@ function command_plugin_install( $args, $assoc_args ) {
 
 	if ( isset( $assoc_args['force'] ) ) {
 		$force = true;
+	}
+
+	// add the CPR query string to the website URL that will prompt it try to identify if we are whitelisted on CPR
+	if ( isset( $assoc_args['bypass'] ) ) {
+		$premium_install = add_query_arg( [ 'cshp_pt_cpr' => true ], $premium_install );
+	}
+
+	if ( isset( $assoc_args['diff'] ) && isset( $assoc_args['not-exists'] ) ) {
+		WP_CLI::error( __( 'Cannot pass both flags --diff and --not-exists. You can only do one.', Plugin_Tracker\get_textdomain() ) );
+	}
+
+	if ( isset( $assoc_args['diff'] ) || isset( $assoc_args['not-exists'] ) ) {
+		$plugins = get_plugins();
+		$installed_plugins = [];
+		foreach ( $plugins as $plugin_file => $data ) {
+			$version       = isset( $data['Version'] ) && ! empty( $data['Version'] ) ? $data['Version'] : '*';
+			$plugin_folder = wp_basename( $plugin_file );
+			$installed_plugins[$plugin_folder] = $version;
+		}
+
+		$premium_install = add_query_arg( [ 'cshp_pt_plugins' => $installed_plugins ], $premium_install );
+
+		if ( $assoc_args['diff'] ) {
+			$premium_install = add_query_arg( [ 'cshp_pt_diff' => '' ], $premium_install );
+		} elseif ( $assoc_args['not-exists'] ) {
+			$premium_install = add_query_arg( [ 'cshp_pt_not_exists' => '' ], $premium_install );
+		}
 	}
 
 	// grab the global parameters that were already passed to the "cshp-pt plugin install" command such as

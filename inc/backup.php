@@ -322,7 +322,7 @@ function has_premium_plugins_version_backed_up( $premium_plugins_list ) {
  */
 function plugin_result( $response, $action, $args ) {
 	$keywords = '';
-	if ( ! is_cornershop_user() ) {
+	if ( ! is_cornershop_user() && ! is_wp_cli_environment() ) {
 		return $response;
 	}
 
@@ -344,7 +344,6 @@ function plugin_result( $response, $action, $args ) {
 	if ( 'query_plugins' === $action && str_starts_with( $keywords, 'cpr:' ) ) {
 		$page = $args->page ?? 1;
 		$results_per_page = $args->per_page ?? 10;
-		//var_dump_error_log($args);
 		$url = add_query_arg( [ 's' => $keywords, 'paged' => $page, 'posts_per_page' => $results_per_page ], sprintf( '%s/wp-json/cshp-plugin-backup/search', get_plugin_update_url() ) );
 		$request = wp_safe_remote_get( $url, [
 				'timeout' => 12,
@@ -374,7 +373,6 @@ function plugin_result( $response, $action, $args ) {
 
 		if ( 200 === wp_remote_retrieve_response_code( $request ) ) {
 			$result = json_decode( wp_remote_retrieve_body( $request ) );
-			//var_dump_error_log($result);
 			$response = $result->result;
 		}
 	}
@@ -406,35 +404,6 @@ function alter_plugin_install_activation_links( $action_links, $plugin ) {
 	return $action_links;
 }
 add_filter( 'plugin_install_action_links', __NAMESPACE__ . '\alter_plugin_install_activation_links', 99, 2 );
-
-function trigger_zip_download_with_site_key() {
-	if ( isset( $_GET['cshp_pt_cpr'] ) ) {
-		$key = sanitize_text_field( $_GET['cshp_pt_cpr'] );
-		$type = 'plugin';
-
-		if ( isset( $_GET['cshp_pt_cpr_type'] ) ) {
-			$type = sanitize_text_field( $_GET['cshp_pt_cpr_type'] );
-		}
-
-		if ( 'theme' === $type ) {
-			$request = new \WP_REST_Request( 'GET', '/cshp-plugin-tracker/theme/download' );
-		} else {
-			$request = new \WP_REST_Request( 'GET', '/cshp-plugin-tracker/plugin/download' );
-		}
-
-		if ( ! empty( $key ) ) {
-			$request->set_param( 'token', $key );
-		}
-
-		$url = add_query_arg( $request->get_query_params(), get_rest_url( null, $request->get_route() ) );
-
-		if ( ! empty( $url ) ) {
-			wp_safe_redirect( $url, 302 );
-			exit;
-		}
-	}
-}
-add_action( 'init', __NAMESPACE__ . '\trigger_zip_download_with_site_key' );
 
 /**
  * Add a fix for when the old versions of the premium plugins backup zip scaffold plugin is activated on a site.
@@ -470,3 +439,39 @@ function fix_plugin_activation_hook_old_scaffold() {
 	}
 }
 add_action( 'plugins_loaded', __NAMESPACE__ . '\fix_plugin_activation_hook_old_scaffold', 1 );
+
+/**
+ * Track when a CPR plugin archive is installed on a website and copy the new scaffold plugin file to that plugin, so that
+ * when that plugin is activated, it does not throw a fatal error.
+ *
+ * The old scaffold plugin file attempts to load the plugin files instead of moving the plugin folders to the main plugin folder. This technique did not work with all plugins, so the new scaffold file is better since it moves the plugin folders.
+ *
+ * @param bool $installation_response True if the package (theme, plugin, or languages) were installed correctly.
+ * @param array $hook_extra More information about what package was installed.
+ * @param array $result Result of the package installation containing the destination folder path and name.
+ *
+ * @return bool The installation package response.
+ */
+function post_cpr_plugin_install( $installation_response, $hook_extra, $result ) {
+	if ( true === $installation_response && 'plugin' === $hook_extra['type'] && 'install' === $hook_extra['action'] ) {
+		if ( isset( $result['source_files'] ) && in_array( 'cshp-premium-plugins.php', $result['source_files'], true ) ) {
+			require_once ABSPATH . '/wp-admin/includes/file.php';
+			WP_Filesystem();
+			global $wp_filesystem;
+
+			$plugin_tracker_folder = get_plugin_file_full_path( get_this_plugin_folder() );
+
+			if ( is_dir( $plugin_tracker_folder ) ) {
+				try {
+					// move the scaffold premium plugin that is contained in this current version of plugin tracker and move it to the downloaded plugin archive and change the name to an underscore file.
+					$wp_filesystem->copy( $plugin_tracker_folder . '/scaffold/cshp-premium-plugins.php', $result['destination'] . '/cshp-premium-plugins.php', true );
+					$wp_filesystem->copy( $plugin_tracker_folder . '/scaffold/cshp-premium-plugins.php', $result['remote_destination'] . '/cshp-premium-plugins.php', true );
+
+				}  catch ( \TypeError $error ) {} // if the plugin cannot be moved due to permissions or space or some other reason, catch it to avoid fatal error
+			}
+		}
+	}
+
+	return $installation_response;
+}
+add_filter( 'upgrader_post_install', __NAMESPACE__ . '\post_cpr_plugin_install', 1, 3 );
