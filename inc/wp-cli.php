@@ -160,14 +160,30 @@ function command_plugin_install( $args, $assoc_args ) {
 	global $dry_run;
 	$dry_run               = false;
 	$no_overwrite                 = false;
-	$premium_install       = false;
+	$premium_install_url       = false;
+	$premium_install_url_parts = [];
+	$is_valid_premium_url = false;
 	$specific_premium_plugins = [];
 	$global_params_string  = '';
 	$global_params_array   = [];
 	$passed_config_options = \WP_CLI::get_config();
+	$find_plugin_tracker_file = Plugin_Tracker\read_tracker_file();
 
-	if ( isset( $args[0] ) && ! empty( $args[0] ) ) {
-		$premium_install = $args[0];
+	if ( isset( $assoc_args['dry-run'] ) ) {
+		$dry_run = true;
+	}
+
+	if ( empty( $args[0] ) ) {
+		$premium_install_url = Plugin_Tracker\get_domain_from_site_key();
+	}
+
+	// check if we are installing the premium plugins by passing a website URL and that we are not installing straight from a .zip file
+	if ( ! empty( $args[0] ) ) {
+		$premium_install_url = $args[0];
+	}
+
+	if ( ! empty( $premium_install_url ) ) {
+		$premium_install_url_parts = wp_parse_url( $premium_install_url );
 	}
 
 	foreach ( $args as $index => $addition_positional_arguments ) {
@@ -178,57 +194,52 @@ function command_plugin_install( $args, $assoc_args ) {
 		$specific_premium_plugins[] = $addition_positional_arguments;
 	}
 
-	// if we have passed specific plugins that we want to install, pass those plugins as arguments to pass to the live site so it only zips the passed plugins
-	if ( ! empty( $premium_install ) && ! empty( $specific_premium_plugins ) ) {
-		$premium_install = add_query_arg( [ 'cshp_pt_plugins' => $specific_premium_plugins ], $premium_install );
-	}
+	// add the CPR query string to the website URL that will prompt it try to identify if we are whitelisted on CPR
+	if ( ! empty( $premium_install_url_parts ) && ! empty( $premium_install_url_parts['scheme'] ) && ! empty( $premium_install_url_parts['host'] ) && ! str_ends_with( $premium_install_url_parts['path'] ?? '', '.zip' ) ) {
+		$is_valid_premium_url = true;
+		$query_strings = [];
 
-	if ( isset( $assoc_args['dry-run'] ) ) {
-		$dry_run = true;
+		if ( ! empty( $premium_install_url_parts['query'] ) ) {
+			wp_parse_str( $premium_install_url_parts['query'], $query_strings );
+		}
+
+		if ( ! isset( $query_strings['token'] ) && ! isset( $query_strings['bypass'] ) ) {
+			$premium_install_url = add_query_arg( [ 'cshp_pt_cpr' => true ], $premium_install_url );
+		} elseif ( isset( $assoc_args['bypass'] ) ) {
+			$bypass = ! empty( $assoc_args['bypass'] ) ? $assoc_args['bypass'] : '';
+			$premium_install_url = add_query_arg( [ 'cshp_pt_cpr' => $bypass ], $premium_install_url );
+		}
+
+		// if we have passed specific plugins that we want to install, pass those plugins as arguments to pass to the live site so it only zips the passed plugins
+		$premium_install_url = add_query_arg( [ 'cshp_pt_plugins' => $specific_premium_plugins ], $premium_install_url );
+
+		if ( isset( $assoc_args['diff'] ) && isset( $assoc_args['not-exists'] ) ) {
+			\WP_CLI::error( __( 'Cannot pass both flags --diff and --not-exists. You can only do one.', Plugin_Tracker\get_textdomain() ) );
+		}
+
+		if ( isset( $assoc_args['diff'] ) || isset( $assoc_args['not-exists'] ) ) {
+			$plugins = get_plugins();
+			$installed_plugins = [];
+			foreach ( $plugins as $plugin_file => $data ) {
+				$version       = isset( $data['Version'] ) && ! empty( $data['Version'] ) ? $data['Version'] : '*';
+				$plugin_folder = wp_basename( $plugin_file );
+				$installed_plugins[$plugin_folder] = $version;
+			}
+
+			$premium_install_url = add_query_arg( [ 'cshp_pt_plugins' => $installed_plugins ], $premium_install_url );
+
+			if ( $assoc_args['diff'] ) {
+				$premium_install_url = add_query_arg( [ 'cshp_pt_diff' => '' ], $premium_install_url );
+			} elseif ( $assoc_args['not-exists'] ) {
+				$premium_install_url = add_query_arg( [ 'cshp_pt_not_exists' => '' ], $premium_install_url );
+			}
+		}
+
+		$premium_install_url = add_query_arg( [ 'cshp_pt_echo' => true ], $premium_install_url );
 	}
 
 	if ( isset( $assoc_args['no-overwrite'] ) ) {
 		$no_overwrite = true;
-	}
-
-	// add the CPR query string to the website URL that will prompt it try to identify if we are whitelisted on CPR
-	$url = wp_parse_url( $premium_install );
-	// check if we are installing the premium plugins by passing a website URL and that we are not installing straight from a .zip file
-
-	if ( ! empty( $url ) && ! empty( $url['scheme'] ) && ! empty( $url['host'] ) && ! str_ends_with( $url['path'] ?? '', '.zip' ) ) {
-		$query_strings = [];
-		if ( ! empty( $url['query'] ) ) {
-			wp_parse_str( $url['query'], $query_strings );
-		}
-
-		if ( ! isset( $query_strings['token'] ) && ! isset( $query_strings['bypass'] ) ) {
-			$premium_install = add_query_arg( [ 'cshp_pt_cpr' => true ], $premium_install );
-		} elseif ( isset( $assoc_args['bypass'] ) ) {
-			$bypass = ! empty( $assoc_args['bypass'] ) ? $assoc_args['bypass'] : '';
-			$premium_install = add_query_arg( [ 'cshp_pt_cpr' => $bypass ], $premium_install );
-		}
-	}
-
-	if ( isset( $assoc_args['diff'] ) && isset( $assoc_args['not-exists'] ) ) {
-		\WP_CLI::error( __( 'Cannot pass both flags --diff and --not-exists. You can only do one.', Plugin_Tracker\get_textdomain() ) );
-	}
-
-	if ( ! empty( $url ) && isset( $assoc_args['diff'] ) || isset( $assoc_args['not-exists'] ) ) {
-		$plugins = get_plugins();
-		$installed_plugins = [];
-		foreach ( $plugins as $plugin_file => $data ) {
-			$version       = isset( $data['Version'] ) && ! empty( $data['Version'] ) ? $data['Version'] : '*';
-			$plugin_folder = wp_basename( $plugin_file );
-			$installed_plugins[$plugin_folder] = $version;
-		}
-
-		$premium_install = add_query_arg( [ 'cshp_pt_plugins' => $installed_plugins ], $premium_install );
-
-		if ( $assoc_args['diff'] ) {
-			$premium_install = add_query_arg( [ 'cshp_pt_diff' => '' ], $premium_install );
-		} elseif ( $assoc_args['not-exists'] ) {
-			$premium_install = add_query_arg( [ 'cshp_pt_not_exists' => '' ], $premium_install );
-		}
 	}
 
 	// grab the global parameters that were already passed to the "cshp-pt plugin install" command such as
@@ -256,10 +267,10 @@ function command_plugin_install( $args, $assoc_args ) {
 	$global_params_array['skip-plugins'] = 'cshp-plugin-tracker';
 	$global_params_string               .= '--skip-plugins=cshp-plugin-tracker ';
 
-	if ( ! empty( $premium_install ) ) {
+	if ( $is_valid_premium_url && ! empty( $premium_install_url ) ) {
 		$zip_premium_plugins_folder_path = '';
-		$command                         = sprintf( 'plugin install %s', $premium_install );
-		\WP_CLI::log( sprintf( esc_html__( 'Preparing to install the premium plugins from %s ...', Plugin_Tracker\get_textdomain() ), $premium_install ) );
+		$command                         = sprintf( 'plugin install %s', $premium_install_url );
+		\WP_CLI::log( sprintf( esc_html__( 'Preparing to install the premium plugins from %s ...', Plugin_Tracker\get_textdomain() ), $premium_install_url ) );
 		$return = \WP_CLI::runcommand(
 			$command,
 			array_merge(
@@ -345,13 +356,11 @@ function command_plugin_install( $args, $assoc_args ) {
 	}//end if
 
 	// handle installing the wordpress.org plugins
-	if ( false === $premium_install ) {
+	if ( ! empty( $find_plugin_tracker_file ) ) {
 		if ( is_wp_error( Plugin_Tracker\create_plugin_uploads_folder() ) ) {
 			\WP_CLI::error( esc_html__( 'Could not find or create the plugin tracker uploads folder. Please make sure the file exists and check file permissions to make sure the uploads folder is readable and writeable.', Plugin_Tracker\get_textdomain() ) );
 			return;
 		}
-
-		$find_plugin_tracker_file = Plugin_Tracker\read_tracker_file();
 
 		if ( empty( $find_plugin_tracker_file ) ) {
 			\WP_CLI::error( esc_html__( 'Could not find or create the plugin tracker composer.json file. Please make sure the file exists in the uploads folder and check file permissions to make sure the uploads folder is readable and writeable.', Plugin_Tracker\get_textdomain() ) );

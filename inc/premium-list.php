@@ -148,6 +148,7 @@ function exclude_plugins_list() {
 		'cshp-plugin-tracker',
 		'cshp-support',
 		'cshp-plugin-backup',
-		'cshp-plugin-updater'
+		'cshp-plugin-updater',
+		'cshp-backups',
 	];
 }

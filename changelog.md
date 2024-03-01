@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1] - 2024-03-01
+
+### Added
+
+- Added the ability to install the premium plugins using the stored site key instead of needing to provide the live URL. The site key will be stored in the database and will be used to translate the site key into a domain.
+- Added the ability to install the premium plugins and the wordpress.org plugins at the same time instead of needing to run two different commands to install both.
+
+### Fixed
+
+- Fixed bug that was preventing the premium plugins from being backed up to CPR.
+- Fixed bug that was preventing old premium plugin zip files from being deleted when the plugins were updated.
+
 ## [1.1.0] - 2024-02-27
 
 ### Added
