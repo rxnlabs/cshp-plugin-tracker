@@ -37,8 +37,8 @@ function backup_premium_plugins() {
 
 		// flag if the site is in production mode but the Kinsta dev environment constant is set
 		if ( defined( 'KINSTA_DEV_ENV' ) &&
-		     true === KINSTA_DEV_ENV &&
-		     'production' === wp_get_environment_type() ) {
+			 true === KINSTA_DEV_ENV &&
+			 'production' === wp_get_environment_type() ) {
 			$return_message = esc_html__( 'Error backing up plugin zip: Website is in production mode but the KINSTA_DEV_ENV flag is on. Turn off the KINSTA_DEV_ENV flag.', get_textdomain() );
 			log_request( 'plugin_zip_backup_error', $return_message );
 		}
@@ -97,18 +97,18 @@ function backup_premium_plugins() {
 
 	if ( ! $error_zip_file && ! empty( get_premium_plugin_zip_file() ) ) {
 		$premium_plugin_zip_file = get_premium_plugin_zip_file();
-		$archive_zip_file_name = basename( $premium_plugin_zip_file );
-		$plugin_content       = wp_json_encode( get_premium_plugin_zip_file_contents( $archive_zip_file_name ) );
-		$home_url             = home_url( '/' );
-		$domain               = wp_parse_url( $home_url );
-		$zip_file_upload_name = sprintf( '%s.zip', sanitize_title( sprintf( '%s/%s', $domain['host'], $domain['path'] ) ) );
-		$curl_file            = new \CurlFile( $premium_plugin_zip_file );
+		$archive_zip_file_name   = basename( $premium_plugin_zip_file );
+		$plugin_content          = wp_json_encode( get_premium_plugin_zip_file_contents( $archive_zip_file_name ) );
+		$home_url                = home_url( '/' );
+		$domain                  = wp_parse_url( $home_url );
+		$zip_file_upload_name    = sprintf( '%s.zip', sanitize_title( sprintf( '%s/%s', $domain['host'], $domain['path'] ) ) );
+		$curl_file               = new \CurlFile( $premium_plugin_zip_file );
 		$curl_file->setPostFilename( $zip_file_upload_name );
 		$form_fields = [
 			'domain'                  => $home_url,
 			'premium_plugin_zip_file' => $curl_file,
 			'plugins'                 => $plugin_content,
-			'site_key' => get_site_key(),
+			'site_key'                => get_site_key(),
 		];
 
 		// Use an anonymous function and pass the local variable that we want to post to that function since
@@ -131,8 +131,8 @@ function backup_premium_plugins() {
 		);
 
 		if ( 200 === wp_remote_retrieve_response_code( $request ) ||
-		     201 === wp_remote_retrieve_response_code( $request ) ||
-		     202 === wp_remote_retrieve_response_code( $request ) ) {
+			 201 === wp_remote_retrieve_response_code( $request ) ||
+			 202 === wp_remote_retrieve_response_code( $request ) ) {
 			$return_message = sprintf( esc_html__( 'Successfully backed up plugin zip %s', get_textdomain() ), $archive_zip_file_name );
 			$log_post       = log_request( 'plugin_zip_backup_complete', $return_message );
 
@@ -203,15 +203,15 @@ function update_wp_http_request( &$handle_or_parameters, $form_body_arguments = 
 
 			foreach ( $fields as $name => $content ) {
 				$data .= '--' . $delimiter . $eol
-				         . 'Content-Disposition: form-data; name="' . $name . '"' . $eol . $eol
-				         . $content . $eol;
+						 . 'Content-Disposition: form-data; name="' . $name . '"' . $eol . $eol
+						 . $content . $eol;
 			}
 
 			foreach ( $files as $name => $content ) {
 				$data .= '--' . $delimiter . $eol
-				         . 'Content-Disposition: form-data; name="' . $name . '"; filename="' . $name . '"' . $eol
-				         // . 'Content-Type: image/png'.$eol
-				         . 'Content-Transfer-Encoding: binary' . $eol;
+						 . 'Content-Disposition: form-data; name="' . $name . '"; filename="' . $name . '"' . $eol
+						 // . 'Content-Type: image/png'.$eol
+						 . 'Content-Transfer-Encoding: binary' . $eol;
 
 				$data .= $eol;
 				$data .= $content . $eol;
@@ -343,47 +343,58 @@ function plugin_result( $response, $action, $args ) {
 	}
 
 	if ( 'query_plugins' === $action && str_starts_with( $keywords, 'cpr:' ) ) {
-		$page = $args->page ?? 1;
+		$page             = $args->page ?? 1;
 		$results_per_page = $args->per_page ?? 10;
-		$url = add_query_arg( [ 's' => $keywords, 'paged' => $page, 'posts_per_page' => $results_per_page ], sprintf( '%s/wp-json/cshp-plugin-backup/search', get_plugin_update_url() ) );
-		$request = wp_safe_remote_get( $url, [
+		$url              = add_query_arg(
+			[
+				's'              => $keywords,
+				'paged'          => $page,
+				'posts_per_page' => $results_per_page,
+			],
+			sprintf( '%s/wp-json/cshp-plugin-backup/search', get_plugin_update_url() )
+		);
+		$request          = wp_safe_remote_get(
+			$url,
+			[
 				'timeout' => 12,
 			]
 		);
 
-		//var_dump_error_log(wp_remote_retrieve_body( $request ));
+		// var_dump_error_log(wp_remote_retrieve_body( $request ));
 		if ( 200 === wp_remote_retrieve_response_code( $request ) ) {
 			$result = json_decode( wp_remote_retrieve_body( $request ), true );
 			// build a response in the exact way that the WordPress plugins page expects it
-			$build_response = new \stdClass();
+			$build_response       = new \stdClass();
 			$build_response->info = [
-				'page' => $args->page,
-				'pages' => $result['pages'],
+				'page'    => $args->page,
+				'pages'   => $result['pages'],
 				'results' => $result['result_count'],
 			];
 
 			$build_response->plugins = $result['result'];
-			$response = $build_response;
+			$response                = $build_response;
 		}
 	} elseif ( 'plugin_information' === $action && str_starts_with( $keywords, 'cpr-cornershop-plugin_recovery-' ) ) {
-		$url = add_query_arg( [ 'slug' => $keywords ], sprintf( '%s/wp-json/cshp-plugin-backup/download', get_plugin_update_url() ) );
-		$request = wp_safe_remote_get( $url, [
+		$url     = add_query_arg( [ 'slug' => $keywords ], sprintf( '%s/wp-json/cshp-plugin-backup/download', get_plugin_update_url() ) );
+		$request = wp_safe_remote_get(
+			$url,
+			[
 				'timeout' => 12,
 			]
 		);
 
 		if ( 200 === wp_remote_retrieve_response_code( $request ) ) {
-			$result = json_decode( wp_remote_retrieve_body( $request ) );
+			$result   = json_decode( wp_remote_retrieve_body( $request ) );
 			$response = $result->result;
 		}
-	}
+	}//end if
 
 	return $response;
 }
 add_filter( 'plugins_api', __NAMESPACE__ . '\plugin_result', 99, 3 );
 
 /**
- * @param array $action_links List of activation links that would be displayed
+ * @param array  $action_links List of activation links that would be displayed
  * @param $plugin
  *
  * @return mixed
@@ -399,7 +410,7 @@ function alter_plugin_install_activation_links( $action_links, $plugin ) {
 	}
 
 	if ( $is_cpr_plugin ) {
-		$action_links[] = sprintf( '<p>%1$s <a href="%2$s" rel="noopener">%3$s</a></p>', __( 'Activate this plugin on the plugins listing page <strong>after Installing</strong> this plugin. The plugin will be named <strong>Cornershop Premium Plugins</strong>', get_textdomain() ), esc_url( admin_url('plugins.php' ) ), __( 'Go to Plugins listing page', get_textdomain() ) );
+		$action_links[] = sprintf( '<p>%1$s <a href="%2$s" rel="noopener">%3$s</a></p>', __( 'Activate this plugin on the plugins listing page <strong>after Installing</strong> this plugin. The plugin will be named <strong>Cornershop Premium Plugins</strong>', get_textdomain() ), esc_url( admin_url( 'plugins.php' ) ), __( 'Go to Plugins listing page', get_textdomain() ) );
 	}
 
 	return $action_links;
@@ -414,13 +425,13 @@ add_filter( 'plugin_install_action_links', __NAMESPACE__ . '\alter_plugin_instal
  * @return void
  */
 function fix_plugin_activation_hook_old_scaffold() {
-	$current_folder = basename( __DIR__ );
-	$active_plugins = get_option( 'active_plugins' );
-	$network_plugins = [];
+	$current_folder       = basename( __DIR__ );
+	$active_plugins       = get_option( 'active_plugins' );
+	$network_plugins      = [];
 	$plugin_files_to_load = [];
 	if ( is_multisite() ) {
 		$network_plugins = get_site_option( 'active_sitewide_plugins' );
-		$active_plugins = array_merge( $active_plugins, $network_plugins );
+		$active_plugins  = array_merge( $active_plugins, $network_plugins );
 	}
 
 	// look for the function that existed in the old version of the scaffold premium plugins file
@@ -447,7 +458,7 @@ add_action( 'plugins_loaded', __NAMESPACE__ . '\fix_plugin_activation_hook_old_s
  *
  * The old scaffold plugin file attempts to load the plugin files instead of moving the plugin folders to the main plugin folder. This technique did not work with all plugins, so the new scaffold file is better since it moves the plugin folders.
  *
- * @param bool $installation_response True if the package (theme, plugin, or languages) were installed correctly.
+ * @param bool  $installation_response True if the package (theme, plugin, or languages) were installed correctly.
  * @param array $hook_extra More information about what package was installed.
  * @param array $result Result of the package installation containing the destination folder path and name.
  *
@@ -468,7 +479,8 @@ function post_cpr_plugin_install( $installation_response, $hook_extra, $result )
 					$wp_filesystem->copy( $plugin_tracker_folder . '/scaffold/cshp-premium-plugins.php', $result['destination'] . '/cshp-premium-plugins.php', true );
 					$wp_filesystem->copy( $plugin_tracker_folder . '/scaffold/cshp-premium-plugins.php', $result['remote_destination'] . '/cshp-premium-plugins.php', true );
 
-				}  catch ( \TypeError $error ) {} // if the plugin cannot be moved due to permissions or space or some other reason, catch it to avoid fatal error
+				} catch ( \TypeError $error ) {
+				} //end try
 			}
 		}
 	}

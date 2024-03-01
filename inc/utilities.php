@@ -9,21 +9,25 @@ namespace Cshp\pt;
  *
  * @return void
  */
-function var_dump_error_log( $object = null ){
+function var_dump_error_log( $object = null ) {
 	// don't enable output buffering if it's already enabled, otherwise a fatal error will be thrown if output buffering is already on
 	// error would be: "Fatal error:  ob_start(): Cannot use output buffering in output buffering display handlers"
 	// don't end output buffering if it's already enabled, otherwise a fatal error will be thrown if output buffering is used in output buffering context
 	// error would be "Fatal error: ob_end_clean(): Cannot use output buffering in output buffering display handlers"
 	if ( empty( ob_get_level() ) || 0 === ob_get_level() ) {
-		ob_start();                    // start buffer capture
-		var_dump( $object );           // dump the values
-		$contents = ob_get_contents(); // put the buffer into a variable
+		ob_start();
+		// start buffer capture
+		var_dump( $object );
+		// dump the values
+		$contents = ob_get_contents();
+		// put the buffer into a variable
 		ob_end_clean();
 	} else {
 		$contents = output_buffering_cast( $object );
 	}
 
-	error_log( $contents );        // log contents of the result of var_dump( $object )
+	error_log( $contents );
+	// log contents of the result of var_dump( $object )
 }
 
 /**
@@ -73,23 +77,23 @@ function debug_backtrace_error_log() {
  */
 function output_buffering_cast( $object ) {
 	if ( is_string( $object ) ) {
-		return "(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is a string:) " . $object;
+		return '(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is a string:) ' . $object;
 	} elseif ( is_numeric( $object ) ) {
-		return "(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is something that is numeric:) " . $object;
+		return '(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is something that is numeric:) ' . $object;
 	} elseif ( is_array( $object ) ) {
 		$json = json_encode( $object );
 
 		if ( empty( $json ) ) {
 			$json = serialize( $object );
 		}
-		return "(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is a an array. We are converting it to a JSON string though for easier reading in the error_log:) " . $json;
+		return '(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is a an array. We are converting it to a JSON string though for easier reading in the error_log:) ' . $json;
 	} elseif ( is_object( $object ) ) {
-		return "(NOTE: output buffering is on, so we cannot var_dump to the error log). This thing passed to the error_log function is a an array. We are converting it to a serialized string though for easier reading in the error_log:) " . json_encode( $object );
+		return '(NOTE: output buffering is on, so we cannot var_dump to the error log). This thing passed to the error_log function is a an array. We are converting it to a serialized string though for easier reading in the error_log:) ' . json_encode( $object );
 	} elseif ( is_null( $object ) ) {
-		return "(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is a null. Returning an empty string)";
+		return '(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is a null. Returning an empty string)';
 	} elseif ( empty( $object ) ) {
-		return "(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is something that evaluates to empty returning an empty string)";
+		return '(NOTE: output buffering is on, so we cannot var_dump to the error log. This thing passed to the error_log function is something that evaluates to empty returning an empty string)';
 	} else {
-		return "(NOTE: output buffering is on, so we cannot var_dump to the error log. We have no idea what this thing passed is and we cannot convert it to a string, so we are just returning nothing. Try turning off output buffering and try var_dump again)";
+		return '(NOTE: output buffering is on, so we cannot var_dump to the error log. We have no idea what this thing passed is and we cannot convert it to a string, so we are just returning nothing. Try turning off output buffering and try var_dump again)';
 	}
 }

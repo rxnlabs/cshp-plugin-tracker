@@ -11,7 +11,7 @@ namespace Cshp\pt;
  * @return void
  */
 function plugin_update_checker() {
-	$update_url = sprintf( '%s/wp-json/cshp-plugin-updater/%s', get_plugin_update_url(), get_this_plugin_folder() );
+	$update_url       = sprintf( '%s/wp-json/cshp-plugin-updater/%s', get_plugin_update_url(), get_this_plugin_folder() );
 	$plugin_file_path = get_plugin_file_full_path( sprintf( '%s/%s.php', get_this_plugin_folder(), get_this_plugin_slug() ) );
 
 	// make sure the update will not be blocked before trying to update it
@@ -50,7 +50,7 @@ function clean_old_options( $wp_upgrader, $upgrade_data ) {
 	}
 
 	if ( isset( $upgrade_data['type'] ) && 'plugin' === $upgrade_data['type'] && isset( $upgrade_data['plugins'] ) ) {
-		foreach( $upgrade_data['plugins'] as $plugin ) {
+		foreach ( $upgrade_data['plugins'] as $plugin ) {
 			// Check to ensure it's my plugin
 			if ( $plugin == get_this_plugin_folder() ) {
 				$find_old_zip_plugin_file = get_option( 'cshp_plugin_tracker_plugin_zip' );
@@ -69,6 +69,6 @@ function clean_old_options( $wp_upgrader, $upgrade_data ) {
 				delete_option( 'cshp_plugin_tracker_plugin_zip_contents' );
 			}
 		}
-	}
+	}//end if
 }
 add_action( 'upgrader_process_complete', __NAMESPACE__ . '\clean_old_options', 10, 2 );

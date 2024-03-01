@@ -39,13 +39,14 @@ function add_settings_link() {
 	add_filter(
 		$filter_name,
 		function ( $links ) {
-			$new_links = [ 'settings' =>
-               sprintf(
-                   '<a title="%s" href="%s">%s</a>',
-                   esc_attr__( 'Cornershop Plugin Tracker settings page', get_textdomain() ),
-                   esc_url( menu_page_url( 'cshp-plugin-tracker', false ) ),
-                   esc_html__( 'Settings', get_textdomain() )
-               ),
+			$new_links = [
+				'settings' =>
+								sprintf(
+									'<a title="%s" href="%s">%s</a>',
+									esc_attr__( 'Cornershop Plugin Tracker settings page', get_textdomain() ),
+									esc_url( menu_page_url( 'cshp-plugin-tracker', false ) ),
+									esc_html__( 'Settings', get_textdomain() )
+								),
 			];
 
 			return array_merge( $links, $new_links );
@@ -82,15 +83,15 @@ function register_options_admin_settings() {
 		function( $input ) {
 			$clean_input = [];
 
-            if ( ! empty( $input ) && is_array( $input ) ) {
-	            foreach ( $input as $plugin_folder ) {
-		            $test = sanitize_text_field( $plugin_folder );
+			if ( ! empty( $input ) && is_array( $input ) ) {
+				foreach ( $input as $plugin_folder ) {
+					$test = sanitize_text_field( $plugin_folder );
 
-		            if ( does_zip_exists( get_plugin_file_full_path( $test ) ) ) {
-			            $clean_input[] = $test;
-		            }
-	            }
-            }
+					if ( does_zip_exists( get_plugin_file_full_path( $test ) ) ) {
+						$clean_input[] = $test;
+					}
+				}
+			}
 
 			return $clean_input;
 		}
@@ -102,15 +103,15 @@ function register_options_admin_settings() {
 		function( $input ) {
 			$clean_input = [];
 
-            if ( ! empty( $clean_input ) ) {
-	            foreach ( $input as $theme_folder ) {
-		            $test = sanitize_text_field( $theme_folder );
+			if ( ! empty( $clean_input ) ) {
+				foreach ( $input as $theme_folder ) {
+					$test = sanitize_text_field( $theme_folder );
 
-		            if ( does_zip_exists( get_plugin_file_full_path( $test ) ) ) {
-			            $clean_input[] = $test;
-		            }
-	            }
-            }
+					if ( does_zip_exists( get_plugin_file_full_path( $test ) ) ) {
+						$clean_input[] = $test;
+					}
+				}
+			}
 
 			return $clean_input;
 		}
@@ -267,14 +268,14 @@ function admin_page_settings_tab() {
 					</div>
 				</td>
 			</tr>
-            <tr>
-                <th scope="row"><label for="cshp-cpr-site-key"><?php esc_html_e( 'Cornershop Plugin Recovery Site Key', get_textdomain() ); ?></label></th>
-                <td>
-                    <p><?php esc_html_e( 'This is the site key that is assigned to this website on Cornershop Plugin Recovery. This key is used to verify that a website is allowed to backup their premium plugins to CPR. This key is generated on the CPR website. Go to that website to generate a site key and add it to this field. NOTE: This key is not needed for the Cornershop Plugin Tracker to work and perform its main duties.', get_textdomain() ); ?></p>
-                    <input type="text" name="cshp_plugin_tracker_cpr_site_key" id="cshp-cpr-site-key" class="regular-text" value="<?php echo esc_attr( get_site_key() ); ?>">
-                    <button type="button" id="cshp-copy-cpr-site-key" data-copy="cshp_plugin_tracker_cpr_site_key" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-                </td>
-            </tr>
+			<tr>
+				<th scope="row"><label for="cshp-cpr-site-key"><?php esc_html_e( 'Cornershop Plugin Recovery Site Key', get_textdomain() ); ?></label></th>
+				<td>
+					<p><?php esc_html_e( 'This is the site key that is assigned to this website on Cornershop Plugin Recovery. This key is used to verify that a website is allowed to backup their premium plugins to CPR. This key is generated on the CPR website. Go to that website to generate a site key and add it to this field. NOTE: This key is not needed for the Cornershop Plugin Tracker to work and perform its main duties.', get_textdomain() ); ?></p>
+					<input type="text" name="cshp_plugin_tracker_cpr_site_key" id="cshp-cpr-site-key" class="regular-text" value="<?php echo esc_attr( get_site_key() ); ?>">
+					<button type="button" id="cshp-copy-cpr-site-key" data-copy="cshp_plugin_tracker_cpr_site_key" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
+				</td>
+			</tr>
 			<tr>
 				<th scope="row"><label for="cshp-token"><?php esc_html_e( 'Access Token', get_textdomain() ); ?></label></th>
 				<td>
@@ -463,9 +464,9 @@ function admin_page_wp_documentation() {
  */
 function admin_notice() {
 	if ( ! empty( get_current_screen() ) &&
-	     'settings_page_cshp-plugin-tracker' === get_current_screen()->id &&
-	     is_wordpress_org_external_request_blocked() &&
-	     is_cornershop_user() ) {
+		 'settings_page_cshp-plugin-tracker' === get_current_screen()->id &&
+		 is_wordpress_org_external_request_blocked() &&
+		 is_cornershop_user() ) {
 		echo sprintf( '<div class="notice notice-error is-dismissible cshp-pt-notice"><p>%s</p></div>', esc_html__( 'External requests to wordpress.org are being blocked. When generating the plugin tracker file, all themes and plugins will be considered premium. Unblock requests to wordpress.org to fix this. Update the PHP constant "WP_ACCESSIBLE_HOSTS" to include exception for *.wordpress.org', get_textdomain() ) );
 	}
 }
