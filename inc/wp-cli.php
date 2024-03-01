@@ -158,16 +158,16 @@ function command_plugin_install( $args, $assoc_args ) {
 
 	global $wp_filesystem;
 	global $dry_run;
-	$dry_run               = false;
-	$no_overwrite                 = false;
+	$dry_run                   = false;
+	$no_overwrite              = false;
 	$premium_install_url       = false;
 	$premium_install_url_parts = [];
-	$is_valid_premium_url = false;
-	$specific_premium_plugins = [];
-	$global_params_string  = '';
-	$global_params_array   = [];
-	$passed_config_options = \WP_CLI::get_config();
-	$find_plugin_tracker_file = Plugin_Tracker\read_tracker_file();
+	$is_valid_premium_url      = false;
+	$specific_premium_plugins  = [];
+	$global_params_string      = '';
+	$global_params_array       = [];
+	$passed_config_options     = \WP_CLI::get_config();
+	$find_plugin_tracker_file  = Plugin_Tracker\read_tracker_file();
 
 	if ( isset( $assoc_args['dry-run'] ) ) {
 		$dry_run = true;
@@ -197,7 +197,7 @@ function command_plugin_install( $args, $assoc_args ) {
 	// add the CPR query string to the website URL that will prompt it try to identify if we are whitelisted on CPR
 	if ( ! empty( $premium_install_url_parts ) && ! empty( $premium_install_url_parts['scheme'] ) && ! empty( $premium_install_url_parts['host'] ) && ! str_ends_with( $premium_install_url_parts['path'] ?? '', '.zip' ) ) {
 		$is_valid_premium_url = true;
-		$query_strings = [];
+		$query_strings        = [];
 
 		if ( ! empty( $premium_install_url_parts['query'] ) ) {
 			wp_parse_str( $premium_install_url_parts['query'], $query_strings );
@@ -206,7 +206,7 @@ function command_plugin_install( $args, $assoc_args ) {
 		if ( ! isset( $query_strings['token'] ) && ! isset( $query_strings['bypass'] ) ) {
 			$premium_install_url = add_query_arg( [ 'cshp_pt_cpr' => true ], $premium_install_url );
 		} elseif ( isset( $assoc_args['bypass'] ) ) {
-			$bypass = ! empty( $assoc_args['bypass'] ) ? $assoc_args['bypass'] : '';
+			$bypass              = ! empty( $assoc_args['bypass'] ) ? $assoc_args['bypass'] : '';
 			$premium_install_url = add_query_arg( [ 'cshp_pt_cpr' => $bypass ], $premium_install_url );
 		}
 
@@ -218,12 +218,12 @@ function command_plugin_install( $args, $assoc_args ) {
 		}
 
 		if ( isset( $assoc_args['diff'] ) || isset( $assoc_args['not-exists'] ) ) {
-			$plugins = get_plugins();
+			$plugins           = get_plugins();
 			$installed_plugins = [];
 			foreach ( $plugins as $plugin_file => $data ) {
-				$version       = isset( $data['Version'] ) && ! empty( $data['Version'] ) ? $data['Version'] : '*';
-				$plugin_folder = wp_basename( $plugin_file );
-				$installed_plugins[$plugin_folder] = $version;
+				$version                             = isset( $data['Version'] ) && ! empty( $data['Version'] ) ? $data['Version'] : '*';
+				$plugin_folder                       = wp_basename( $plugin_file );
+				$installed_plugins[ $plugin_folder ] = $version;
 			}
 
 			$premium_install_url = add_query_arg( [ 'cshp_pt_plugins' => $installed_plugins ], $premium_install_url );
@@ -236,7 +236,7 @@ function command_plugin_install( $args, $assoc_args ) {
 		}
 
 		$premium_install_url = add_query_arg( [ 'cshp_pt_echo' => true ], $premium_install_url );
-	}
+	}//end if
 
 	if ( isset( $assoc_args['no-overwrite'] ) ) {
 		$no_overwrite = true;

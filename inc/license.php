@@ -36,15 +36,19 @@ if ( ! defined( 'IMAGIFY_API_KEY' ) ) {
 // License SearchWP
 // https://searchwp.com/documentation/hooks/searchwp-license-key/
 if ( function_exists( '\add_filter' ) ) {
-	add_filter( 'searchwp\license\key', function( $key ) {
-		return '0b26a39ee36007ec9a18a71fd47395d7';
-	}, 2 );
+	add_filter(
+		'searchwp\license\key',
+		function( $key ) {
+			return '0b26a39ee36007ec9a18a71fd47395d7';
+		},
+		2
+	);
 }
 
 // License WP Rocket
 // https://docs.wp-rocket.me/article/100-resolving-problems-with-license-validation#staging
 if ( ! defined( 'WP_ROCKET_KEY' ) ) {
-	define( 'WP_ROCKET_KEY', 'bf69211b');
+	define( 'WP_ROCKET_KEY', 'bf69211b' );
 }
 
 // License WP Rocket
