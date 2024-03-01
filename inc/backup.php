@@ -108,6 +108,7 @@ function backup_premium_plugins() {
 			'domain'                  => $home_url,
 			'premium_plugin_zip_file' => $curl_file,
 			'plugins'                 => $plugin_content,
+			'site_key' => get_site_key(),
 		];
 
 		// Use an anonymous function and pass the local variable that we want to post to that function since

@@ -3,7 +3,7 @@
 Plugin Name: Cornershop Plugin Tracker
 Plugin URI: https://cornershopcreative.com/
 Description: Keep track of the current versions of themes and plugins installed on a WordPress site. This plugin should <strong>ALWAYS be Active</strong> unless you are having an issue where this plugin is the problem. If you are having issues with this plugin, please contact Cornershop Creative's support. If you are no longer a client of Cornershop Creative, this plugin is no longer required. You can deactivate and delete this plugin.
-Version: 1.1.0
+Version: 1.1.1
 Text Domain: cshp-pt
 Author: Cornershop Creative
 Author URI: https://cornershopcreative.com/
@@ -26,6 +26,8 @@ if ( ! function_exists( '\get_plugins' ) ||
 require 'composer-vendor/autoload.php';
 // load libraries not installed with composer
 load_non_composer_libraries();
+// include file with functions needed to update this plugin
+require_once 'inc/updater.php';
 // include file with plugins agency licenses
 require_once 'inc/license.php';
 // include file with list of premium plugins and themes
@@ -34,6 +36,8 @@ require_once 'inc/premium-list.php';
 require_once 'inc/backup.php';
 // include file with utility functions
 require_once 'inc/utilities.php';
+// include the admin UI for controlling the plugin settings
+require_once 'inc/admin.php';
 
 // load the WP CLI commands
 if ( is_wp_cli_environment() ) {
@@ -292,25 +296,6 @@ function add_cron_job() {
 add_action( 'init', __NAMESPACE__ . '\add_cron_job' );
 
 /**
- * Initialize a way for the plugin to be updated since it will not be hosted on wordpress.org
- *
- * @return void
- */
-function plugin_update_checker() {
-	$update_url = sprintf( '%s/wp-json/cshp-plugin-updater/%s', get_plugin_update_url(), get_this_plugin_folder() );
-
-	// make sure the update will not be blocked before trying to update it
-	if ( ! is_external_domain_blocked( $update_url ) && class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ) ) {
-		\YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-			$update_url,
-			__FILE__,
-			get_this_plugin_folder()
-		);
-	}
-}
-add_action( 'init', __NAMESPACE__ . '\plugin_update_checker' );
-
-/**
  * Try to determine if this plugin is being run via WP CLI
  *
  * @return bool True if WP CLI is running. False if WP CLI is not running or cannot be detected.
@@ -478,8 +463,8 @@ function create_archive_post_type() {
 			],
 			'public'                => false,
 			'hierarchical'          => false,
-			'show_ui'               => false,
-			'show_in_nav_menus'     => false,
+			'show_ui'               => true,
+			'show_in_nav_menus'     => true,
 			'supports'              => [ 'title', 'editor', 'custom-fields', 'author' ],
 			'has_archive'           => false,
 			'rewrite'               => true,
@@ -637,27 +622,19 @@ add_action( 'wp_insert_post', __NAMESPACE__ . '\limit_archive_post_type', 10, 3 
 /**
  * Delete the zip archive of premium plugin file when the corresponding post is deleted.
  *
- * @param  int  $post_id  ID of the post that is about to be deleted.
- * @param  string $previous_status Previous status of the post.
+ * @param  int  $post_id  ID of the post that is deleted.
+ * @param  \WP_Post $post Post that was just deleted.
  *
  * @return void
  */
-function delete_archive_file( $post_id, $previous_status = '' ) {
-    if ( get_archive_post_type() !== get_post_type( $post_id ) ) {
+function delete_archive_file( $post_id, $post ) {
+    if ( get_archive_post_type() !== get_post_type( $post ) ) {
         return;
     }
 
 	wp_delete_file( get_archive_zip_file( $post_id ) );
-
-    $post_type_data = get_post_type_object( get_archive_post_type() );
-    // if we are in the admin area of the site when the post was deleted, redirect the user to the list of other archives
-    if ( is_admin() && is_cornershop_user() && true === $post_type_data->show_ui ) {
-	    $post_type_admin_screen = sprintf( 'edit.php?post_status=private&post_type=%s', get_archive_post_type() );
-	    wp_redirect( admin_url($post_type_admin_screen ), 302 );
-	    exit;
-    }
 }
-add_action( 'wp_trash_post', __NAMESPACE__ . '\delete_archive_file', 10, 2 );
+add_action( 'before_delete_post', __NAMESPACE__ . '\delete_archive_file', 10, 2 );
 
 /**
  * Get the post type that will be used for a log
@@ -735,15 +712,6 @@ function get_this_plugin_slug() {
 }
 
 /**
- * Get the URL where we can get the plugin updates since this plugin is not hosted on wordpress.org
- *
- * @return string URL to ping to get plugin updates.
- */
-function get_plugin_update_url() {
-    return 'https://plugins.cornershopcreative.com';
-}
-
-/**
  * Add this plugin's update url to the list of safe URLs that can be used with remote requests.
  *
  * Useful if calling wp_safe_remote_get. Ensures that the plugin update URL is considered a safe URL to help avoid forced redirections.
@@ -773,23 +741,26 @@ function get_premium_plugin_zip_file( $active_only = true ) {
 	$plugins = get_active_plugins();
     $plugins_folders = [];
 
-    if ( false === $active_only ) {
-	    $plugins = array_keys( get_plugins() );
-    }
+	foreach ( $plugins as $plugin ) {
+		$plugin_folder_name      = dirname( $plugin );
+		$plugin_folder_path_file = get_plugin_file_full_path( $plugin );
 
-	foreach ( $plugins as $plugin_folder_with_file => $plugin_data ) {
-		$plugins_folders[] = basename( $plugin_folder_with_file );
-	}
+		// exclude plugins that we explicitly don't want to download
+		if ( in_array( $plugin_folder_name, get_excluded_plugins(), true ) ) {
+			continue;
+		}
+
+		// if the plugin has disabled updates, include it in the list of premium plugins
+		// only zip up plugins that are not available on WordPress.org
+		if ( in_array( $plugin_folder_name, premium_plugins_list(), true ) || is_premium_plugin( $plugin_folder_path_file ) ) {
+			$plugins_folders[]  = $plugin_folder_name;
+		}
+	}//end foreach
 
     $archive_zip_file_name = get_archive_zip_file_by_contents( $plugins_folders );
 
-    if ( empty( $archive_zip_file_name ) ) {
-        $archive_zip_file_name = get_option( 'cshp_plugin_tracker_plugin_zip' );
-
-        if ( ! empty( $archive_zip_file_name ) ) {
-            // remove the file path and just keep the filename (if the file path is present)
-            $archive_zip_file_name = basename( $archive_zip_file_name );
-        }
+    if ( ! empty( $archive_zip_file_name ) && is_archive_zip_old( wp_basename( $archive_zip_file_name ) ) ) {
+        return;
     }
 
     if ( ! empty( $archive_zip_file_name ) ) {
@@ -815,7 +786,6 @@ function get_archive_zip_file( $post_id ) {
 
     if ( ! empty( $zip_file_name ) ) {
 	    $zip_path = sprintf( '%s/%s', create_plugin_uploads_folder(), $zip_file_name );
-
         if ( does_zip_exists( $zip_path ) ) {
             return $zip_path;
         }
@@ -959,7 +929,7 @@ function get_premium_theme_zip_file() {
  * zip file.
  */
 function get_premium_plugin_zip_file_contents( $archive_zip_file_name_or_archive_zip_post = '' ) {
-    $plugin_zip_contents = '';
+    $plugin_zip_contents = [];
 
     if ( $archive_zip_file_name_or_archive_zip_post instanceof \WP_Post ) {
         $archive_zip_post = $archive_zip_file_name_or_archive_zip_post;
@@ -982,10 +952,6 @@ function get_premium_plugin_zip_file_contents( $archive_zip_file_name_or_archive
 
 	if ( ! empty( $archive_zip_post ) ) {
 		$plugin_zip_contents = get_post_meta( $archive_zip_post->ID, 'cshp_plugin_tracker_archived_plugins', true );
-
-		if ( empty( $plugin_zip_contents ) ) {
-			$plugin_zip_contents = get_option( 'cshp_plugin_tracker_plugin_zip_contents', [] );
-		}
 	}
 
 	return $plugin_zip_contents;
@@ -1035,6 +1001,14 @@ function get_excluded_themes() {
 	return get_option( 'cshp_plugin_tracker_exclude_themes', [] );
 }
 
+/**
+ * Get the key that is used to reference this website on the Cornershop Plugin Recovery website. This key is generated in the CPR website.
+ *
+ * @return false|string|null Site key that is used to reference this site on CPR.
+ */
+function get_site_key() {
+	return get_option( 'cshp_plugin_tracker_cpr_site_key', '' );
+}
 
 /**
  * Determine if the composer.json file should update in real-time or if the file should update during daily cron job
@@ -1326,6 +1300,29 @@ function get_active_plugins() {
 	}
 
 	return $active_plugins;
+}
+
+/**
+ * Get the status of all plugins to determine if they are active or inactive.
+ *
+ * @return array List of plugins with the plugin folder as the key and the status as the value.
+ */
+function get_plugins_status() {
+	$plugins = array_keys( get_plugins() );
+	$status = [];
+
+	foreach ( $plugins as $plugin_relative_file ) {
+		$plugin_folder = dirname( $plugin_relative_file );
+		if ( is_multisite() && is_plugin_active_for_network( $plugin_relative_file ) ) {
+			$status[$plugin_folder] = 'network-active';
+		} elseif ( is_plugin_active( $plugin_relative_file ) ) {
+			$status[$plugin_folder] = 'active';
+		} else {
+			$status[$plugin_folder] = 'inactive';
+		}
+	}
+
+	return $status;
 }
 
 /**
@@ -2082,17 +2079,17 @@ function is_token_verify( $passed_token ) {
  * @return bool True if the IP address is verified. False otherwise.
  */
 function is_ip_address_verify() {
-	$url = sprintf( '%s/wp-json/cshp-plugin-backup/verify', get_plugin_update_url() );
+	$url = sprintf( '%s/wp-json/cshp-plugin-backup/verify/ip-address', get_plugin_update_url() );
 
 	$request = wp_safe_remote_head( $url, [
 			'timeout' => 12,
 			'headers' => [
-                'CPR-Key' => get_request_ip_address(),
+                'cpr-ip-address' => get_request_ip_address(),
 			]
 		]
 	);
 
-	if ( 200 === wp_remote_retrieve_response_code( $request ) && true === boolval( wp_remote_retrieve_header( $request, 'cpr-key-verified' ) ) ) {
+	if ( 200 === wp_remote_retrieve_response_code( $request ) && true === boolval( wp_remote_retrieve_header( $request, 'cpr-ip-address-verified' ) ) ) {
 		return true;
 	}
 
@@ -2111,6 +2108,53 @@ function is_authorized( $token = '' ) {
 }
 
 /**
+ * Get the domain that corresponds to the site key. The site key should be stored in the generated composer.json file
+ * and is used to automatically download the premium plugins without having to specify the domain or generate a token,
+ *
+ * @param string $site_key The generated site key on Cornershop Plugin Recovery.
+ *
+ * @return string The domain that a site key corresponds to.
+ */
+function get_domain_from_site_key( $site_key = '' ) {
+	$composer_file = get_tracker_file();
+	if ( empty( $site_key ) ) {
+		if ( ! empty( get_site_key() ) ) {
+			$site_key = get_site_key();
+		} elseif ( ! empty( $composer_file ) && file_exists( $composer_file ) ) {
+			$composer_file = wp_json_file_decode( $composer_file, [ 'associative' => true ] );
+
+			if ( ! empty( $composer_file['extra'] ) && ! empty( $composer_file['extra']['cpr-site-key'] ) ) {
+				$site_key = $composer_file['extra']['cpr-site-key'];
+			}
+		}
+	}
+
+	if ( ! empty( $site_key ) ) {
+		$url = sprintf( '%s/wp-json/cshp-plugin-backup/verify/site-key', get_plugin_update_url() );
+		$url = add_query_arg( [ 'cpr_site_key' => $site_key ], $url );
+		$request = wp_safe_remote_get( $url );
+
+		if ( 200 === wp_remote_retrieve_response_code( $request ) ) {
+			$body = json_decode( wp_remote_retrieve_body( $request ), true );
+
+			if ( isset( $body['result'] ) && ! empty( $body['result']['domain'] ) ) {
+				$domain = $body['result']['domain'];
+				$domain_parts = wp_parse_url( $body['result']['domain'] );
+				// if there is no scheme, assume that the domain is using https
+				if ( ! empty( $domain_parts ) && empty( $domain_parts['scheme'] ) && ( ! empty( $domain_parts['host'] ) || ! empty( $domain_parts['path'] ) ) ) {
+					// sometimes the domain host is parsed as being the domain path if not http or https is specified at the beginning
+					$domain = sprintf( 'https://%s', $domain );
+				}
+
+				return $domain;
+			}
+		}
+	}
+
+	return;
+}
+
+/**
  * REST endpoint for downloading the premium plugins
  *
  * @param \WP_REST_Request $request WP REST API request.
@@ -2122,6 +2166,9 @@ function download_plugin_zip_rest( $request ) {
 	$try_whitelist_bypass = $request->has_param( 'bypass' );
     $diff_only = $request->has_param( 'diff' );
     $not_exists = $request->has_param( 'not_exists' );
+	// determine if the file url should just returned as a string rather than redirecting to the zip for download
+	$echo = $request->has_param( 'echo' );
+
     $skip_plugins = [];
 	$zip_all_plugins = true === boolval( sanitize_text_field( $request->get_param( 'include_all_plugins' ) ) );
     $plugins = $request->get_param( 'plugins' );
@@ -2195,7 +2242,22 @@ function download_plugin_zip_rest( $request ) {
 	$zip_file_result = zip_premium_plugins_include( $clean_plugins, $zip_all_plugins );
 
     if ( does_zip_exists( $zip_file_result ) ) {
-	    send_premium_plugins_zip_for_download( $zip_file_result );
+		// if the user just wanted the URL to the zip file, then output that. Normally this would come from a WP CLI command
+		if ( $echo === true ) {
+			$zip_file_url = home_url( sprintf( '/%s', str_replace( ABSPATH, '', $zip_file_result ) ) );
+			return new \WP_REST_Response(
+				[
+					'error'   => true,
+					'message' => esc_html__( 'Successfully generated zip file of premium plugins' ),
+					'result' => [
+						'url' => $zip_file_url,
+					]
+				],
+				200
+			);
+		} else {
+			send_premium_plugins_zip_for_download( $zip_file_result );
+		}
     }
 
 	$message = __( 'Plugin zip file does not exist or cannot be generated', get_textdomain() );
@@ -2773,27 +2835,6 @@ function get_request_geolocation() {
 }
 
 /**
- * Save the new path of the plugin zip file and delete the old zip file
- *
- * @param string $zip_file_path Path to the zip file to save.
- *
- * @return void
- */
-function save_plugin_zip_file( $zip_file_path = '' ) {
-	$previous_zip = get_premium_plugin_zip_file();
-
-	if ( ! empty( $previous_zip ) ) {
-		wp_delete_file( $previous_zip );
-	}
-
-	if ( does_zip_exists( $zip_file_path ) ) {
-		update_option( 'cshp_plugin_tracker_plugin_zip', basename( $zip_file_path ) );
-	} else {
-		update_option( 'cshp_plugin_tracker_plugin_zip', '' );
-	}
-}
-
-/**
  * Save the name of the premium plugins zip file that is saved with only some plugins.
  *
  * @param string $zip_file_path Path to the zip file to save.
@@ -2902,22 +2943,6 @@ function save_theme_zip_file( $zip_file_path = '' ) {
 }
 
 /**
- * Save the name and versions of the plugins that were saved to the most recent premium plugins zip file.
- *
- * @param array $plugin_content_data Associative array with plugin folder name as the key and the plugin version as the
- * value.
- *
- * @return void
- */
-function save_plugin_zip_file_contents( $plugin_content_data = '' ) {
-	if ( does_zip_exists( get_premium_plugin_zip_file() ) ) {
-		update_option( 'cshp_plugin_tracker_plugin_zip_contents', $plugin_content_data );
-	} else {
-		update_option( 'cshp_plugin_tracker_plugin_zip_contents', '' );
-	}
-}
-
-/**
  * Save the name and versions of the themes that were saved to the most recent premium themes zip file.
  *
  * @param array $theme_content_data Associative array with theme folder name as the key and the theme version as the
@@ -2934,482 +2959,14 @@ function save_theme_zip_file_contents( $theme_content_data = '' ) {
 }
 
 /**
- * Add options page to manage the plugin settings
- *
- * @return void
- */
-function add_options_admin_menu() {
-	if ( ! is_cornershop_user() ) {
-		return;
-	}
-
-	add_options_page(
-		__( 'Cornershop Plugin Tracker' ),
-		__( 'Cornershop Plugin Tracker' ),
-		'manage_options',
-		'cshp-plugin-tracker',
-		__NAMESPACE__ . '\admin_page'
-	);
-}
-add_action( 'admin_menu', __NAMESPACE__ . '\add_options_admin_menu' );
-
-/**
- * Add a link to the plugin settings page on the plugins table view list
- *
- * @return void
- */
-function add_settings_link() {
-	$filter_name = sprintf( 'plugin_action_links_%s', plugin_basename( __FILE__ ) );
-
-	if ( ! is_cornershop_user() ) {
-		return;
-	}
-
-	add_filter(
-		$filter_name,
-		function ( $links ) {
-			$new_links = [
-				sprintf(
-					'<a title="%s" href="%s">%s</a>',
-					esc_attr__( 'Cornershop Plugin Tracker settings page', get_textdomain() ),
-					esc_url( menu_page_url( 'cshp-plugin-tracker', false ) ),
-					esc_html__( 'Settings', get_textdomain() )
-				),
-			];
-
-			return array_merge( $links, $new_links );
-		},
-		10
-	);
-}
-add_filter( 'admin_init', __NAMESPACE__ . '\add_settings_link' );
-
-/**
- * Register settings for the plugin
- *
- * @return void
- */
-function register_options_admin_settings() {
-	register_setting(
-		'cshp_plugin_tracker',
-		'cshp_plugin_tracker_token',
-		function( $input ) {
-			$token = trim( sanitize_text_field( $input ) );
-			if ( $token !== get_stored_token() && ! empty( $token ) ) {
-				log_request( 'token_delete' );
-				log_request( 'token_create' );
-			} elseif ( empty( $token ) ) {
-				log_request( 'token_delete' );
-			}
-			return $token;
-		}
-	);
-
-	register_setting(
-		'cshp_plugin_tracker',
-		'cshp_plugin_tracker_exclude_plugins',
-		function( $input ) {
-			$clean_input = [];
-
-			foreach ( $input as $plugin_folder ) {
-				$test = sanitize_text_field( $plugin_folder );
-
-				if ( does_zip_exists( get_plugin_file_full_path( $test ) ) ) {
-					$clean_input[] = $test;
-				}
-			}
-
-			return $clean_input;
-		}
-	);
-
-	register_setting(
-		'cshp_plugin_tracker',
-		'cshp_plugin_tracker_exclude_themes',
-		function( $input ) {
-			$clean_input = [];
-
-			foreach ( $input as $theme_folder ) {
-				$test = sanitize_text_field( $theme_folder );
-
-				if ( does_zip_exists( get_plugin_file_full_path( $test ) ) ) {
-					$clean_input[] = $test;
-				}
-			}
-
-			return $clean_input;
-		}
-	);
-
-	register_setting(
-		'cshp_plugin_tracker',
-		'cshp_plugin_tracker_live_change_tracking',
-		function( $input ) {
-			$real_time_update = trim( sanitize_text_field( $input ) );
-			if ( 'no' !== $real_time_update || empty( $real_time_update ) ) {
-				$real_time_update = 'yes';
-			} elseif ( 'no' === $real_time_update ) {
-				$real_time_update = 'no';
-			}
-			return $real_time_update;
-		}
-	);
-}
-add_action( 'admin_init', __NAMESPACE__ . '\register_options_admin_settings' );
-
-/**
- * Create a settings page for the plugin
- *
- * @return void
- */
-function admin_page() {
-	if ( ! is_cornershop_user() ) {
-		return;
-	}
-	$default_tab = null;
-	$tab         = isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : $default_tab;
-	?>
-	<div class="wrap">
-		<h1><?php esc_html_e( get_admin_page_title() ); ?></h1>
-		<nav class="nav-tab-wrapper">
-			<a href="?page=cshp-plugin-tracker" class="nav-tab <?php echo ( null === $tab ? esc_attr( 'nav-tab-active' ) : '' ); ?>"><?php esc_html_e( 'Settings', get_textdomain() ); ?></a>
-			<a href="?page=cshp-plugin-tracker&tab=log" class="nav-tab <?php echo ( 'log' === $tab ? esc_attr( 'nav-tab-active' ) : '' ); ?>"><?php esc_html_e( 'Log', get_textdomain() ); ?></a>
-			<a href="?page=cshp-plugin-tracker&tab=documentation" class="nav-tab <?php echo ( 'documentation' === $tab ? esc_attr( 'nav-tab-active' ) : '' ); ?>"><?php esc_html_e( 'Documentation', get_textdomain() ); ?></a>
-		</nav>
-		<div class="tab-content">
-			<?php
-			switch ( $tab ) {
-				case 'log':
-						admin_page_log_tab();
-					break;
-				case 'documentation':
-						admin_page_wp_documentation();
-					break;
-				case 'settings':
-				default:
-						admin_page_settings_tab();
-			}
-			?>
-		</div>
-	</div>
-
-	<?php
-}
-
-/**
- * Output the settings tab for the plugin
- *
- * @return void
- */
-function admin_page_settings_tab() {
-	$active_plugins   = get_active_plugins();
-	$active_themes    = get_active_themes();
-	$plugin_list      = '';
-	$themes_list      = '';
-	$excluded_plugins = get_excluded_plugins();
-	$excluded_themes  = get_excluded_themes();
-	sort( $active_plugins );
-	sort( $active_themes );
-
-	foreach ( $active_plugins as $plugin ) {
-		$plugin_data        = get_plugin_data( get_plugin_file_full_path( $plugin ), false, false );
-		$version_check      = isset( $plugin_data['Version'] ) ? $plugin_data['Version'] : '';
-		$plugin_folder_name = dirname( $plugin );
-
-		if ( $plugin_folder_name === get_this_plugin_folder() ) {
-			continue;
-		}
-
-		// if the plugin has disabled updates, include it in the list of premium plugins
-		// only try to exclude plugins that are not available on WordPress.org
-		if ( ! is_premium_plugin( $plugin ) ) {
-			continue;
-		}
-
-		$plugin_list .= sprintf(
-			'<li>
-            <input type="checkbox" name="cshp_plugin_tracker_exclude_plugins[]" id="%1$s" value="%1$s" %2$s>
-            <label for="%1$s">%3$s</label>
-            </li>',
-			esc_attr( dirname( $plugin ) ),
-			checked( in_array( dirname( $plugin ), $excluded_plugins, true ), true, false ),
-			$plugin_data['Name']
-		);
-	}//end foreach
-
-	if ( empty( $plugin_list ) ) {
-		$plugin_list = __( 'No premium plugins installed or detected. Plugins installed match the name and versions of plugins available on wordpress.org.', get_textdomain() );
-	}
-
-	foreach ( $active_themes as $theme_folder_name ) {
-		$theme = wp_get_theme( $theme_folder_name );
-
-		// only try to exclude themes that are not available on WordPress.org
-		if ( $theme->exists() && is_theme_available( $theme_folder_name, $theme->get( 'Version' ) ) ) {
-			continue;
-		}
-
-		$themes_list .= sprintf(
-			'<li>
-            <input type="checkbox" name="cshp_plugin_tracker_exclude_themes[]" id="%1$s" value="%1$s" %2$s>
-            <label for="%1$s">%3$s</label>
-            </li>',
-			esc_attr( $theme_folder_name ),
-			checked( in_array( dirname( $theme_folder_name ), $excluded_themes, true ), true, false ),
-			$theme->Name
-		);
-	}
-
-	if ( empty( $themes_list ) ) {
-		$themes_list = __( 'No premium themes installed or detected. Themes installed match the name and versions of themes available on wordpress.org.', get_textdomain() );
-	}
-	?>
-	<form method="post" action="options.php">
-		<?php settings_fields( 'cshp_plugin_tracker' ); ?>
-		<?php do_settings_sections( 'cshp_plugin_tracker' ); ?>
-		<table class="form-table" role="presentation">
-			<tbody>
-				<tr>
-					<th scope="row"><label for="cshp-plugin-file-generation"><?php esc_html_e( 'Generate plugin tracker file in real-time', get_textdomain() ); ?></label></th>
-					<td>
-						<p><?php esc_html_e( 'By default, the composer.json file will be updated on plugin, theme, and WordPress core updates, as well as plugin and theme activations.', get_textdomain() ); ?></p>
-						<p><?php esc_html_e( 'Since the update happens in real time, this can slow down plugin and theme activations. Disable real-time updates if you notice a slowdown installing plugins or themes.', get_textdomain() ); ?></p>
-						<div>
-							<input type="radio" name="cshp_plugin_tracker_live_change_tracking" id="cshp-yes-live-track" value="yes" <?php checked( should_real_time_update() ); ?>>
-							<label for="cshp-yes-live-track"><?php esc_html_e( 'Yes, update the file in real-time. (NOTE: file still needs to be manually committed after it updates)', get_textdomain() ); ?></label>
-						</div>
-						<div>
-							<input type="radio" name="cshp_plugin_tracker_live_change_tracking" value="no" id="cshp-no-live-track" <?php checked( ! should_real_time_update() ); ?>>
-							<label for="cshp-no-live-track"><?php esc_html_e( 'No, update the file during cron job. (NOTE: file still needs to be manually committed after it updates)', get_textdomain() ); ?></label>
-						</div>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-token"><?php esc_html_e( 'Access Token', get_textdomain() ); ?></label></th>
-					<td>
-						<input readonly type="text" name="cshp_plugin_tracker_token" id="cshp-token" class="regular-text" value="<?php echo esc_attr( get_stored_token() ); ?>">
-						<button type="button" id="cshp-generate-key" class="button hide-if-no-js"><?php esc_html_e( 'Generate New Token', get_textdomain() ); ?></button>
-						<button type="button" id="cshp-delete-key" class="button hide-if-no-js"><?php esc_html_e( 'Delete Token', get_textdomain() ); ?></button>
-						<button type="button" id="cshp-copy-token" data-copy="cshp_plugin_tracker_token" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<td colspan="2">
-						<p class="cshp-pt-warning">
-							<?php esc_html_e( 'WARNING: Generating a new token will delete the old token. Any request using the old token will stop working, so be sure to update the token in any tools that are using the old token.', get_textdomain() ); ?>
-						</p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-active-plugin-api-endpoint"><?php esc_html_e( 'API Endpoint to download Active plugins that are not available on wordpress.org', get_textdomain() ); ?></label></th>
-					<td>
-						<input disabled type="text" name="cshp_plugin_tracker_api_endpoint" id="cshp-active-plugin-api-endpoint" class="large-text" value="<?php echo esc_attr( get_api_active_plugin_downloads_endpoint() ); ?>">
-						<button type="button" id="cshp-copy-api-endpoint" data-copy="cshp_plugin_tracker_api_endpoint" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-rewrite-endpoint"><?php esc_html_e( 'Alternative endpoint to download Active plugins that are not available on wordpress.org (if WP REST API is disabled)', get_textdomain() ); ?></label></th>
-					<td>
-						<input disabled type="text" name="cshp_plugin_tracker_rewrite_endpoint" id="cshp-rewrite-endpoint" class="large-text" value="<?php echo esc_attr( get_rewrite_active_plugin_downloads_endpoint() ); ?>">
-						<button type="button" id="cshp-copy-rewrite-endpoint" data-copy="cshp_plugin_tracker_rewrite_endpoint" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-active-plugin-theme-api-endpoint"><?php esc_html_e( 'API Endpoint to download Active theme that is not available on wordpress.org', get_textdomain() ); ?></label></th>
-					<td>
-						<input disabled type="text" name="cshp_plugin_tracker_theme_api_endpoint" id="cshp-active-plugin-theme-api-endpoint" class="large-text" value="<?php echo esc_attr( get_api_theme_downloads_endpoint() ); ?>">
-						<button type="button" id="cshp-copy-api-endpoint" data-copy="cshp_plugin_tracker_theme_api_endpoint" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-rewrite-theme-endpoint"><?php esc_html_e( 'Alternative endpoint to download Active theme that is not available on wordpress.org (if WP REST API is disabled)', get_textdomain() ); ?></label></th>
-					<td>
-						<input disabled type="text" name="cshp_plugin_tracker_rewrite_theme_endpoint" id="cshp-rewrite-theme-endpoint" class="large-text" value="<?php echo esc_attr( get_rewrite_theme_downloads_endpoint() ); ?>">
-						<button type="button" id="cshp-copy-rewrite-endpoint" data-copy="cshp_plugin_tracker_rewrite_theme_endpoint" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-plugin-exclude"><?php esc_html_e( 'Exclude plugins from being added to the generated Zip file', get_textdomain() ); ?></label></th>
-					<td>
-						<ul>
-							<?php echo $plugin_list; ?>
-						</ul>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-theme-exclude"><?php esc_html_e( 'Exclude themes from being added to the generated Zip file', get_textdomain() ); ?></label></th>
-					<td>
-						<ul>
-							<?php echo $themes_list; ?>
-						</ul>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-wp-cli-plugin-install-command"><?php esc_html_e( 'WP CLI command to install wordpress.org plugins', get_textdomain() ); ?></label></th>
-					<td>
-						<textarea id="cshp-wp-cli-plugin-install-command" disabled class="regular-text"><?php echo generate_plugins_wp_cli_install_command( generate_composer_installed_plugins(), 'raw' ); ?></textarea>
-						<button type="button" id="cshp-wp-cli-plugins-command" data-copy="cshp-wp-cli-plugin-install-command" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-wp-cli-premium-plugins-download"><?php esc_html_e( 'WP CLI command to install premium plugins', get_textdomain() ); ?></label></th>
-					<td>
-						<input disabled type="text" id="cshp-wp-cli-premium-plugins-download" class="large-text" value="<?php echo esc_attr( generate_premium_plugins_wp_cli_install_command( 'raw' ) ); ?>"/>
-						<button type="button" id="cshp-tracker-wp-cli-premium-plugins-download" data-copy="cshp-wp-cli-premium-plugins-download" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-wp-cli-theme-install-command"><?php esc_html_e( 'WP CLI command to install wordpress.org themes', get_textdomain() ); ?></label></th>
-					<td>
-						<textarea id="cshp-wp-cli-theme-install-command" disabled class="regular-text"><?php echo generate_themes_wp_cli_install_command( generate_composer_installed_themes(), 'raw' ); ?></textarea>
-						<button type="button" id="cshp-wp-cli-themes-command" data-copy="cshp-wp-cli-plugin-install-command" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-wp-cli-premium-themes-download"><?php esc_html_e( 'WP CLI command to install premium themes', get_textdomain() ); ?></label></th>
-					<td>
-						<input disabled type="text" id="cshp-wp-cli-premium-themes-download" class="large-text" value="<?php echo esc_attr( generate_premium_themes_wp_cli_install_command( 'raw' ) ); ?>"/>
-						<button type="button" id="cshp-tracker-wp-cli-premium-themes-download" data-copy="cshp-wp-cli-premium-themes-download" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-wget-premium-plugins-download"><?php esc_html_e( 'Wget command to download premium plugins', get_textdomain() ); ?></label></th>
-					<td>
-						<input disabled type="text" id="cshp-wget-premium-plugins-download" class="large-text" value="<?php echo esc_attr( generate_wget_plugins_download_command( 'raw' ) ); ?>"/>
-						<button type="button" id="cshp-tracker-wget-premium-plugins-download" data-copy="cshp-wget-premium-plugins-download" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="cshp-wget-premium-themes-download"><?php esc_html_e( 'Wget command to download premium themes', get_textdomain() ); ?></label></th>
-					<td>
-						<input disabled type="text" id="cshp-wget-premium-themes-download" class="large-text" value="<?php echo esc_attr( generate_wget_themes_download_command( 'raw' ) ); ?>"/>
-						<button type="button" id="cshp-tracker-wget-premium-themes-download" data-copy="cshp-wget-premium-themes-download" class="button hide-if-no-js copy-button"><?php esc_html_e( 'Copy', get_textdomain() ); ?></button>
-					</td>
-				</tr>
-			</tbody>
-		</table>
-		<?php submit_button( __( 'Save Settings', get_textdomain() ) ); ?>
-	</form>
-	<?php
-}
-
-/**
- * Output the log page
- *
- * @return void
- */
-function admin_page_log_tab() {
-	$table_html = sprintf( '<tr><td colspan="4">%s</td></tr>', __( 'No entries found', get_textdomain() ) );
-	$query      = new \WP_Query(
-		[
-			'post_type'      => get_log_post_type(),
-			'posts_per_page' => 200,
-			'post_status'    => 'private',
-			'order'          => 'DESC',
-			'no_found_rows'  => true,
-		]
-	);
-
-	if ( $query->have_posts() ) {
-		$table_html = '';
-		foreach ( $query->posts as $post ) {
-			$table_html .= sprintf(
-				'<tr>
-                <td>%1$s</td>
-                <td>%2$s</td>
-                <td>%3$s</td>
-                <td>%4$s</td>
-                <td>%5$s</td>
-            </tr>',
-				esc_html( get_the_title( $post ) ),
-				esc_html( wp_strip_all_tags( get_post_field( 'post_content', $post ) ) ),
-				esc_html( get_the_date( 'm/d/Y h:i:s a', $post ) ),
-				esc_html( get_the_author_meta( 'user_nicename', $post->post_author ) ),
-				get_post_meta( $post->ID, 'url', true )
-			);
-		}
-	}
-	?>
-	<table class="table wp-list-table widefat" id="cshpt-log">
-		<thead>
-			<tr>
-				<th><?php esc_html_e( 'Title', get_textdomain() ); ?></th>
-				<th><?php esc_html_e( 'Content', get_textdomain() ); ?></th>
-				<th data-type="date" data-format="MM/DD/YYYY"><?php esc_html_e( 'Date', get_textdomain() ); ?></th>
-				<th><?php esc_html_e( 'Author', get_textdomain() ); ?></th>
-				<th><?php esc_html_e( 'URL', get_textdomain() ); ?></th>
-			</tr>
-		</thead>
-		<tbody>
-			<?php echo $table_html; ?>
-		</tbody>
-	</table>
-	<?php
-}
-
-/**
- * Admin page to show WP site data that PMs add to the Standard WP documentation sheet handed to clients after site builds.
- *
- * @return void
- */
-function admin_page_wp_documentation() {
-	?>
-
-	<h2><?php esc_html_e( 'Navigation Menus', get_textdomain() ); ?></h2>
-	<?php echo generate_menus_list_documentation(); ?>
-	<h2><?php esc_html_e( 'Gravity Forms', get_textdomain() ); ?></h2>
-	<?php echo generate_gravityforms_active_documentation(); ?>
-	<h2><?php esc_html_e( 'Active Plugins', get_textdomain() ); ?></h2>
-	<?php echo generate_plugins_active_documentation(); ?>
-
-	<?php
-}
-
-/**
- * Add an admin notice on the plugin page if external requests to wordpress.org are blocked
- *
- * @return void
- */
-function admin_notice() {
-	if ( ! empty( get_current_screen() ) &&
-		 'settings_page_cshp-plugin-tracker' === get_current_screen()->id &&
-		 is_wordpress_org_external_request_blocked() &&
-		 is_cornershop_user() ) {
-		echo sprintf( '<div class="notice notice-error is-dismissible cshp-pt-notice"><p>%s</p></div>', esc_html__( 'External requests to wordpress.org are being blocked. When generating the plugin tracker file, all themes and plugins will be considered premium. Unblock requests to wordpress.org to fix this. Update the PHP constant "WP_ACCESSIBLE_HOSTS" to include exception for *.wordpress.org', get_textdomain() ) );
-	}
-}
-add_action( 'admin_notices', __NAMESPACE__ . '\admin_notice', 10 );
-/**
- * Enqueue styles and scripts for the plugin
- *
- * @return void
- */
-function admin_enqueue() {
-    $screen_ids = [ 'settings_page_cshp-plugin-tracker', 'plugin-install' ];
-	if ( ! empty( get_current_screen() ) && in_array( get_current_screen()->id, $screen_ids, true ) ) {
-		wp_enqueue_script( 'simple-datatables', get_plugin_file_uri( '/assets/vendor/simple-datatables/js/simple-datatables.min.js' ), [], '7.1.2', true );
-		wp_enqueue_style( 'simple-datatables', get_plugin_file_uri( '/assets/vendor/simple-datatables/css/simple-datatables.min.css' ), [], '7.1.2', true );
-		wp_enqueue_script( 'cshp-plugin-tracker', get_plugin_file_uri( '/assets/js/admin.js' ), [ 'simple-datatables', 'wp-api-fetch' ], get_version(), true );
-		wp_enqueue_style( 'cshp-plugin-tracker', get_plugin_file_uri( '/assets/css/admin.css' ), [], get_version() );
-
-		wp_localize_script(
-			'cshp-plugin-tracker',
-			'cshp_pt',
-			[
-				'tab' => isset( $_GET['tab'] ) ? esc_attr( $_GET['tab'] ) : '',
-			]
-		);
-	}
-}
-add_action( 'admin_enqueue_scripts', __NAMESPACE__ . '\admin_enqueue', 9999 );
-
-/**
  * Generate the JSON for the composer array template without any of the specific requires for this site
  *
  * @return array Formatted array for use in a composer.json file.
  */
 function generate_composer_template() {
 	$relative_directory = basename( WP_CONTENT_DIR );
+	$plugins_status = get_plugins_status();
+	ksort( $plugins_status );
 	$composer           = [
 		'name'         => sprintf( '%s/wordpress', sanitize_key( get_bloginfo( 'name' ) ) ),
 		'description'  => sprintf( __( 'Installed plugins and themes for the WordPress install %s', get_textdomain() ), home_url() ),
@@ -3426,7 +2983,7 @@ function generate_composer_template() {
 			],
 			'1' => [
 				'type' => 'composer',
-				'url'  => remove_query_arg( [ 'token' ], get_api_active_plugin_downloads_endpoint() ),
+				'url'  => home_url( '/' ),
 				'only' => [
 					'premium-plugin/*',
 					'premium-theme/*',
@@ -3447,6 +3004,8 @@ function generate_composer_template() {
 					'type:wordpress-theme',
 				],
 			],
+			'cpr-site-key' => get_site_key(),
+			'plugins_status' => $plugins_status,
 		],
 	];
 
@@ -4225,6 +3784,7 @@ function trigger_zip_download_with_site_key() {
 		$plugins = ! empty( $_GET['cshp_pt_plugins'] ) ? $_GET['cshp_pt_plugins'] : '';
 		$diff = isset( $_GET['cshp_pt_diff'] );
 		$not_exists = isset( $_GET['cshp_pt_not_exists'] );
+		$echo_result = isset( $_GET['cshp_pt_echo'] );
 		$clean_plugins = [];
 
 		if ( 'theme' === $type ) {
@@ -4259,6 +3819,10 @@ function trigger_zip_download_with_site_key() {
 			$request->set_param( 'diff', '' );
 		} elseif ( $not_exists ) {
 			$request->set_param( 'not_exists', '' );
+		}
+
+		if ( $echo_result ) {
+			$request->set_param( 'echo', '' );
 		}
 
 		$url = add_query_arg( $request->get_query_params(), get_rest_url( null, $request->get_route() ) );
