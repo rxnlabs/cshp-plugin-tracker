@@ -1,19 +1,20 @@
 # Cornershop Plugin Tracker
-## Installation
-Install this plugin by downloading the .zip file or a release tag from Bitbucket and uploading it to the WordPress admin.
 
-## Purpose
-This plugin has two purposes and will be installed on all client websites.
+A WordPress plugin that tracks installed WordPress core, themes, and plugins; backs up premium plugins, and streamlines plugin management.
 
-### Track other plugins
-The main purpose is for tracking the currently **installed** version of WordPress core, the themes, and the plugins on a WordPress website. The assets will be tracked in a `composer.json` file that is saved in the Uploads directory. This `composer.json` file should be tracked in the main Git repository for the website.
+## Inspiration
+This project was inspired by [WP-Composer](https://github.com/rxnlabs/wp-composer), an open-source WP-CLI tool I created and presented at [WordPress Baltimore 2016](https://wordpress.tv/2016/11/21/deyonte-wilkinson-managing-wordpress-dependencies-in-single-and-multisite-environments/). The biggest challenge in that earlier solution was handling premium plugins not hosted on WordPress.org—Cornershop Plugin Tracker aims to solve that gap.
+
+## Overview
+
+Cornershop Plugin Tracker was created to solve a key problem we were having with our client sites: large Git repositories filled with third-party code (WordPress core, themes, plugins). This plugin **automatically generates** two key files in your `wp-content/uploads/cshp-plugin-tracker` folder:
+
+1. **`composer.json`** – Lists all installed plugins, themes, and WordPress core versions.
+2. **`README.md`** – Summarizes the installed WP core, themes, and plugins (including versions) for quick reference.
 
 By tracking the installed versions of a WP core, third-party plugins, and third-party themes, these items can stop being tracked in the main Git repository for the website.
 
-The `composer.json` file will be tracked in the main Git repo for the website along with a `README.md` that will list out the WordPress version, plugins, and themes _installed_ on the site.
-
-This `composer.json` file will look like:
-
+### Composer.json format
 ```json
 {
   "name": "wordpress59playground/wordpress",
@@ -63,53 +64,105 @@ This `composer.json` file will look like:
 }
 ```
 
-The `README.md` file will look like:
-```markdown
-## WordPress Version
-- 6.1.1
+### README.md format
+![Generated Readme file](docs/assets/readme-output.png)
 
-## Themes Installed
-- blocksy-child
-- blocksy
+## The main benefits of the plugin.
 
-## Plugins Installed
-- backupbuddy (version 8.7.4.0)
-- classic-editor (version 1.6.2)
-- cshp-support (version 1.0.0)
-- debug-bar (version 1.1.3)
-- elementor-pro (version 3.5.2)
+- **Cleaner Repos** – Only custom code ends up in version control; third-party code is installed on demand.
+- **Easier Staging/Dev Environments** – Spin up WordPress core and standard plugins/themes quickly without bundling them in Git.
+- **Simple Premium Plugin Management** – Keep premium plugins backed up and easily recoverable, regardless of direct license access.
+- **Enhanced Version Recovery** – Access previous versions of premium plugins via the Cornershop Plugin Recovery site whenever you need to roll back.
 
-## WP-CLI Command to Install Plugins
-`wp plugin install classic-editor --version="1.6.2" & wp plugin install debug-bar --version="1.1.3"`
+## Key Features
 
-## WP-CLI Command to Install Themes
-`wp plugin install blocksy`
+1. **Track & Document Third-Party Code**
+   - Automatically detects installed WP core, theme, and plugin versions.
+   - Saves them into both a `composer.json` and `README.md` for transparency.
 
-## Command Line to Zip Themes
-Use command to zip premium themes if the .zip file cannot be created or downloaded
-`zip -r premium-themes.zip blocksy-child`
+2. **Daily & Weekly Backup of Premium Plugins**
+   - Detects “premium” plugins (any plugin not available on WordPress.org).
+   - Backs them up daily to AWS S3 and to the Cornershop Plugin Recovery (CPR) website for safe storage and easy retrieval during weekly plugin updates.
 
-## Command Line to Zip Plugins
-Use command to zip premium plugins if the .zip file cannot be created or downloaded
-`zip -r premium-plugins.zip backupbuddy cshp-support elementor-pro`
-```
+3. **Cornershop Plugin Recovery Site**
+   - A companion site ([Cornershop Plugin Recovery](https://plugins.cornershopcreative.com)) that stores previous versions of premium plugins installed on client sites.
+   - Search for and recover older plugin versions if an update breaks functionality.
+   - Premium plugins are automatically backed up by Cornershop Plugin Tracker to CPR each week.
 
-### Download the Premium themes and Premium plugins
-The secondary capability of this plugin is to enable developers to be able to download a .zip file of the **premium** plugins and themes that are **activated** on the current website. 
+4. **Search & Recover Premium Plugins via Native Plugin Search or WP-CLI**
+   - In WordPress Admin, you can search for premium plugins with the prefix `cpr:` (e.g., `cpr:gravityforms`).
+   - Supports WP-CLI commands (e.g., `wp plugin install cpr:gravityforms`) to download but **not** auto-activate premium plugins.
 
-Premium plugins and themes are defined as any plugin and theme that is not available for download on [wordpress.org](https://wordpress.org/). You can download the .zip file using the WordPress REST API URL:
-- `https://insert-name-of-site.org/wp-json/cshp-plugin-tracker/plugin/download`
-- `https://insert-name-of-site.org/wp-json/cshp-plugin-tracker/theme/download`
+5. **Simple WP-CLI Commands**
+   - Generate or update the tracking files with `wp cshp-pt generate`.
+   - Install premium plugins with `wp cshp-pt plugin-install` (from a local `.zip` or remote URL).
+   - Zip and store premium plugins or themes for easy reuse (e.g., `wp cshp-pt plugin-zip`).
 
-The **main** purpose of this capability is for spinning up a staging version of the live website on a demo server. Instead of cloning the Git repo for the website and the Git repo having all the plugins, themes, and WordPress core in that Git repo, you would:
+## Installation
 
-1. Download the Git repo (the Git repo should contain the mu-plugins, plugins that are specific to the site, and the main theme)
-2. Install WordPress core using WP CLI `wp core download --skip-content --version=insert-version-number-from-composer.json --force --path=.`
-3. Install wordpress.org plugins using WP CLI or composer
-4. Install wordpress.org themes using WP CLI or composer 
-5. Download the premium plugins .zip file using the WP REST API URL using `wget` or `curl`.
-6. Unzip the file plugins .zip and place the plugins into the `plugins/` folder
-7. Download the premium themes .zip file using the WP REST API URL (the premium themes should usually be the parent theme if we are using a child theme) using `wget` or `curl`.
-8. Unzip the themes .zip file and place themes into the `themes/` folder.
+1. **Download or Clone**
+   - Download the `.zip` file from your repo
+   - Upload and install via the WordPress admin, or place it in `wp-content/plugins`.
 
-Most of these steps can be automated but we will need to modify the `setupsite` command to support this first.
+2. **Activate the Plugin**
+   - Go to **Plugins → Installed Plugins** → Activate **Cornershop Plugin Tracker**, or run:
+     ```bash
+     wp plugin activate cshp-plugin-tracker
+     ```
+
+3. **(Optional) Access Token**
+   - If you need to download premium plugins/themes directly from a site via the REST API, set the **Access Token** under **Settings → Cornershop Plugin Tracker**. Otherwise, leave it empty.
+
+## Usage
+
+1. **Generate Tracking Files**
+   - After installation, run:
+     ```bash
+     wp cshp-pt generate
+     ```
+     This command creates/updates the `composer.json` and `README.md` in `wp-content/uploads/cshp-plugin-tracker/`.
+
+2. **Search & Recover Premium Plugins**
+   - In **Plugins → Add New**, simply type `cpr:` followed by the plugin name (e.g., `cpr:gravityforms`).
+   - Similarly, you can run WP-CLI:
+     ```bash
+     wp plugin install "cpr:gravityforms"
+     ```
+     Plugins download from Cornershop Plugin Recovery, but are not automatically activated.
+
+3. **Backup Premium Plugins**
+   - Cornershop Plugin Tracker periodically backs up premium plugins to AWS S3 and the Cornershop Plugin Recovery site.
+   - You can restore previous versions if something breaks during an update.
+
+## Screenshots
+
+Below are some images illustrating how Cornershop Plugin Tracker integrates with the Cornershop Plugin Recovery site and how you can search and recover premium plugins:
+
+1. **Plugin Recovery Site Download Interface**  
+   ![Cornershop Plugin Recovery site screenshot](docs/assets/cpr-site-scereenshot.png)  
+   *(Download premium plugins from the CPR website.)*
+
+2. **Native WP Plugin Search with `cpr:` Prefix**  
+   ![Native plugin search with cpr prefix](docs/assets/cpr-search-example.gif)  
+   *(Demonstration of searching for premium plugins via the WordPress admin.)*
+
+   ![Screenshot of CPR results](docs/assets/cpr-result-gravityforms.png)
+
+3. **WP-CLI Integration**  
+   ![WP-CLI plugin search screenshot](docs/assets/cpr-wp-cli-result.png)  
+   *(Use `wp plugin install cpr:some-plugin` to recover premium plugins.)*
+
+## Frequently Asked Questions
+### Why not just not track plugins and rely on WordPress Packagist and Composer?
+Great question.
+
+- Not all web host support installing plugins using Composer or have Composer installed. Not all web host even have WP CLI installed.
+- We worked with organizations of various sizes and budgets. Not every client can afford a good host that enforce good workflow habits like Pantheon.
+- We don’t always deploy code in a way that is suitable to a good workflow. We want to have best practices for both support clients and retainers but we have not found a good middle ground that does not increase maintenance costs for our clients.
+- WordPress Packagist is not a project officially supported by the core WordPress team.
+- WordPress Packagist does not work with premium plugins not hosted on wordpress.org
+
+## Contributing & Support
+
+- **Issues & PRs** – Feel free to open pull requests or issues in the repository.
+- **Further Documentation** – For advanced usage (e.g., `.htaccess` lockdown, Git configuration, removing previously tracked plugins from Git), see the plugin’s extended documentation at [plugin-tracker-detailed-documentation.pdf](docs/files/plugin-tracker-detailed-documentation.pdf) .
