@@ -131,7 +131,6 @@ trait Share {
 	 * @return bool True if the user has an authorized email address. False if the user is not using a authorized email.
 	 */
 	public function is_authorized_user() {
-		return true;
 		if ( is_user_logged_in() && current_user_can( 'manage_options' ) ) {
 			$user = wp_get_current_user();
 			// Cornershop user?
