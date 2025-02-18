@@ -24,7 +24,7 @@ I designed, built, and maintained this plugin from its inception. While I welcom
 - [src/Utilities.php](src/Utilities.php)
 
 ## Inspiration
-This project was inspired by [WP-Composer](https://github.com/rxnlabs/wp-composer), an open-source WP-CLI tool I created and presented at [WordPress Baltimore 2016](https://wordpress.tv/2016/11/21/deyonte-wilkinson-managing-wordpress-dependencies-in-single-and-multisite-environments/). The biggest challenge in that earlier solution was handling premium plugins not hosted on WordPress.org—Cornershop Plugin Tracker aims to solve that gap.
+This project was inspired by [WP-Composer](https://github.com/rxnlabs/wp-composer), an open-source WP-CLI tool I created and presented at [WordCamp Baltimore 2016](https://wordpress.tv/2016/11/21/deyonte-wilkinson-managing-wordpress-dependencies-in-single-and-multisite-environments/). The biggest challenge in that earlier solution was handling premium plugins not hosted on WordPress.org—Cornershop Plugin Tracker aims to solve that gap.
 
 ## Overview
 
