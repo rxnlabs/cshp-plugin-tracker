@@ -1,0 +1,38 @@
+Cornershop Plugin Tracker - Proprietary Software License
+
+Copyright © 2025. All rights reserved.
+
+This is a legal agreement between you (the "Licensee") and [Your Company Name] (the "Licensor"). By installing, copying, or otherwise using the [Your Plugin Name] software (the "Software"), you agree to be bound by the terms of this agreement.
+
+---
+
+### 1. License Grant
+The Licensor hereby grants you a non-exclusive, non-transferable, and limited license to use the Software solely for your personal or business purposes. You may not redistribute, resell, lend, lease, rent, sublicense, or otherwise exploit the Software for commercial purposes without prior written consent from the Licensor.
+
+---
+
+### 2. Intellectual Property
+The Software is the proprietary and confidential intellectual property of the Licensor. All rights, title, and interest in and to the Software, including any derivatives, modifications, or updates, remain with the Licensor. This license does not constitute a transfer of ownership.
+
+---
+
+### 3. Restrictions
+As a Licensee, you are strictly prohibited from:
+- Copying, reproducing, or distributing the Software without authorization.
+- Modifying or creating derivative works based on the Software.
+- Decompiling, reverse engineering, or disassembling the Software.
+- Removing or altering any proprietary notices or labels from the Software.
+
+Any unauthorized use of the Software or violation of these restrictions will result in the termination of this license.
+
+---
+
+### 4. Warranty Disclaimer
+The Software is provided "AS IS," WITHOUT WARRANTY OF ANY KIND, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement. The Licensor does not guarantee that the Software will be error-free, secure, or operate uninterrupted.
+
+You assume full responsibility for the use of the Software and any damages that may result.
+
+---
+
+### 5. Limitation of Liability
+Under no circumstances
