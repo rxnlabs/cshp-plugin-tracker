@@ -10,6 +10,7 @@ I designed, built, and maintained this plugin from its inception. While I welcom
 - **PHP** – Primary language for plugin logic and REST API handling.
 - **JavaScript/TypeScript** – Supporting scripts interactions on the admin settings page.
 - **Third-Party APIs** – Integration with WordPress.org and the Cornershop Plugin Recovery service.
+- **CI/CD Pipelines** - Bitbucket pipelines integration [bitbucket-pipelines.yml](bitbucket-pipelines.yml).
 
 ## Main files to evaluate
 - [cshp-plugin-tracker.php](cshp-plugin-tracker.php)
