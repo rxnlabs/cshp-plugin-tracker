@@ -3,13 +3,30 @@
   "optimize-autoloader": true,
   "autoload": {
     "psr-4": {
-
+      "Cshp\\Plugin\\Tracker\\": "src"
     }
   },
+  "minimum-stability": "dev",
   "config": {
-    "vendor-dir": "composer-vendor"
+    "allow-plugins": {
+      "pestphp/pest-plugin": true,
+      "composer/installers": true,
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
   },
   "require": {
-    "yahnis-elsts/plugin-update-checker": "^5.0"
+    "php": "^8.1",
+    "yahnis-elsts/plugin-update-checker": "^5.0",
+    "league/container": "5.x-dev"
+  },
+  "require-dev": {
+    "dingo-d/wp-pest-integration-test-setup": "2.0-alpha",
+    "pestphp/pest": "^2.18.0",
+    "wp-coding-standards/wpcs": "^3.0",
+    "automattic/vipwpcs": "dev-develop"
+  },
+  "scripts": {
+    "phpcs": "vendor/bin/phpcs",
+    "phpcbf": "vendor/bin/phpcbf"
   }
 }
