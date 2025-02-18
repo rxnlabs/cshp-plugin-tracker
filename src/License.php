@@ -2,6 +2,12 @@
 /**
  * Premium licenses for plugins that Cornershop Creative has agency licenses for.
  */
+declare( strict_types=1 );
+namespace Cshp\Plugin\Tracker;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 // License Gravity Forms (key valid as of 11/2018)
 // https://docs.gravityforms.com/wp-config-options/#gf-license-key
@@ -38,7 +44,7 @@ if ( ! defined( 'IMAGIFY_API_KEY' ) ) {
 if ( function_exists( '\add_filter' ) ) {
 	add_filter(
 		'searchwp\license\key',
-		function( $key ) {
+		function ( $key ) {
 			return '0b26a39ee36007ec9a18a71fd47395d7';
 		},
 		2
