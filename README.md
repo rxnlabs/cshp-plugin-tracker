@@ -2,6 +2,26 @@
 
 A WordPress plugin that tracks installed WordPress core, themes, and plugins; backs up premium plugins, and streamlines plugin management.
 
+## My Contributions
+I designed, built, and maintained this plugin from its inception. While I welcomed collaboration, I served as the primary developer and sole maintainer because the rest of the team was focused on client-facing projects. My role allowed me to concentrate on improving our internal processes and workflows through this plugin’s development.
+
+## Core Technologies
+- **WordPress** – Plugin development and core integration.
+- **PHP** – Primary language for plugin logic and REST API handling.
+- **JavaScript/TypeScript** – Supporting scripts interactions on the admin settings page.
+- **Third-Party APIs** – Integration with WordPress.org and the Cornershop Plugin Recovery service.
+
+## Main files to evaluate
+- [cshp-plugin-tracker.php](cshp-plugin-tracker.php)
+- [src/Plugin_Tracker.php](src/Plugin_Tracker.php)
+- [src/Backup.php](src/Backup.php)
+- [src/Archive.php](src/Archive.php)
+- [src/WP_CLI.php](src/WP_CLI.php)
+- [_assets_src/js/admin.ts](_assets_src/js/admin.ts)
+- [src/Admin.php](src/Admin.php)
+- [src/Logger.php](src/Logger.php)
+- [src/Utilities.php](src/Utilities.php)
+
 ## Inspiration
 This project was inspired by [WP-Composer](https://github.com/rxnlabs/wp-composer), an open-source WP-CLI tool I created and presented at [WordPress Baltimore 2016](https://wordpress.tv/2016/11/21/deyonte-wilkinson-managing-wordpress-dependencies-in-single-and-multisite-environments/). The biggest challenge in that earlier solution was handling premium plugins not hosted on WordPress.org—Cornershop Plugin Tracker aims to solve that gap.
 
@@ -74,7 +94,11 @@ By tracking the installed versions of a WP core, third-party plugins, and third-
 - **Simple Premium Plugin Management** – Keep premium plugins backed up and easily recoverable, regardless of direct license access.
 - **Enhanced Version Recovery** – Access previous versions of premium plugins via the Cornershop Plugin Recovery site whenever you need to roll back.
 
-## Key Features
+## Important Note for Testing
+If you decide to download and test this plugin, you will need to have a local or remote WordPress website set up using an administrator email address from either **@wideeyecreative.com** or **@wideeye.co**. This requirement ensures access to the plugin’s settings and additional functionality.
+
+## More Details
+### Key Features
 
 1. **Track & Document Third-Party Code**
    - Automatically detects installed WP core, theme, and plugin versions.
@@ -98,7 +122,7 @@ By tracking the installed versions of a WP core, third-party plugins, and third-
    - Install premium plugins with `wp cshp-pt plugin-install` (from a local `.zip` or remote URL).
    - Zip and store premium plugins or themes for easy reuse (e.g., `wp cshp-pt plugin-zip`).
 
-## Installation
+### Installation
 
 1. **Download or Clone**
    - Download the `.zip` file from your repo
@@ -113,7 +137,7 @@ By tracking the installed versions of a WP core, third-party plugins, and third-
 3. **(Optional) Access Token**
    - If you need to download premium plugins/themes directly from a site via the REST API, set the **Access Token** under **Settings → Cornershop Plugin Tracker**. Otherwise, leave it empty.
 
-## Usage
+### Usage
 
 1. **Generate Tracking Files**
    - After installation, run:
@@ -134,7 +158,7 @@ By tracking the installed versions of a WP core, third-party plugins, and third-
    - Cornershop Plugin Tracker periodically backs up premium plugins to AWS S3 and the Cornershop Plugin Recovery site.
    - You can restore previous versions if something breaks during an update.
 
-## Screenshots
+### Screenshots
 
 Below are some images illustrating how Cornershop Plugin Tracker integrates with the Cornershop Plugin Recovery site and how you can search and recover premium plugins:
 
