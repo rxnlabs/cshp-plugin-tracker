@@ -18,6 +18,7 @@ wp-cli.local.yml
 sftp-config.json
 *.un~
 .*.swp
+.vscode/
 
 # Packages #
 ############
@@ -41,6 +42,42 @@ ehthumbs.db
 Thumbs.db
 *.sql
 
+# Unit testing files
+wp/
+wp-content/
+
+# Node modules
+node_modules
+node_modules/
+
 # Project specific ignores
 composer-vendor/bin
+vendor/bin
+vendor/phpunit
+vendor/yoast
 cshp-plugin-tracker.zip
+
+# Ignore Composer require-dev vendor folders but don't ignore the vendor folder since Composer
+# is not always available in the environment that we load the plugin
+vendor/automattic/vipwpcs
+vendor/php-parallel-lint/php-console-highlighter
+vendor/php-parallel-lint/php-parallel-lint
+vendor/phpcompatibility/php-compatibility
+vendor/phpcsstandards/phpcsdevtools
+vendor/phpunit/phpunit
+vendor/dingo-d/wp-pest-integration-test-setup
+vendor/dealerdirect/phpcodesniffer-composer-installer
+vendor/composer/composer
+vendor/ext-json
+vendor/ext-zip
+vendor/yoast/phpunit-polyfills
+vendor/yoast/yoastcs
+vendor/phpstan/phpstan
+vendor/phpstan/phpstan-symfony
+vendor/squizlabs/php_codesniffer
+vendor/zenstruck/console-test
+vendor/pestphp/pest
+vendor/pestphp/pest-dev-tools
+vendor/pestphp/pest-plugin-type-coverage
+vendor/symfony/process
+vendor/wp-coding-standards/wpcs

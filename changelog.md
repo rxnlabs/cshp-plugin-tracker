@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.0] - 2025-02-18
+
+### Added
+
+- Added a debug mode so authorized users can view the plugin logs and plugin archive details.
+
+### Changed
+- Major rewrite of the plugin with improved core systems for better stability and compatibility (no user-facing changes).
+
 ## [1.1.1] - 2024-03-01
 
 ### Added
