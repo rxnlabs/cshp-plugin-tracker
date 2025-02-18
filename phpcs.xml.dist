@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<ruleset name="Custom WordPress + PSR-4 Coding Standards">
+    <description>Custom ruleset for WordPress VIP Coding Standards with PSR-4 conventions.</description>
+
+    <!-- Include the WordPress-Extra Coding Standards -->
+    <rule ref="WordPress-Extra"/>
+
+    <arg name="extensions" value="php" />
+    <arg name="colors" />
+    <arg value="s" /><!-- Show sniff codes in all reports -->
+
+    <!-- Exclude specific WordPress rules -->
+    <rule ref="WordPress-Core">
+        <exclude name="WordPress.Files.FileName" />
+        <exclude name="WordPress.WP.I18n.NonSingularStringLiteralDomain" />
+        <exclude name="WordPress.WP.I18n.NonSingularStringLiteralText" />
+        <exclude name="WordPress.WP.I18n.MissingTranslatorsComment" />
+        <exclude name="Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed" />
+        <exclude name="Generic.CodeAnalysis.UnusedFunctionParameter.Found" />
+        <exclude name="Generic.CodeAnalysis.EmptyStatement.DetectedCatch" />
+    </rule>
+
+    <!-- Add custom rule to allow short array syntax -->
+    <rule ref="Generic.Arrays.DisallowShortArraySyntax">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Specify file patterns and directories to analyze -->
+    <file>./src</file>
+    <!--<file>./tests</file>-->
+
+    <!-- Exclude vendor directory -->
+    <exclude-pattern>vendor/*</exclude-pattern>
+    <exclude-pattern>non-composer-vendor/*</exclude-pattern>
+</ruleset>

@@ -1,0 +1,57 @@
+{
+	"name": "deyonte-basic",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Basic assets builder and transpiler for JS and CSS files with limited abstraction layers. Compiles TypeScript and uses Eslint",
+	"engines": {
+		"node": ">=16.x <=27.x",
+		"npm": ">=8.x <=14.x"
+	},
+	"scripts": {
+		"watch": "npm run styles -- --ext css --watch & npm run styles -- --ext min.css --env production --watch & npm run scripts -- --watch && kill $!",
+		"build": "npm run styles -- --ext css; npm run styles -- --ext min.css --env production; npm run scripts",
+		"styles": "postcss _assets_src/scss/*.scss _assets_src/scss/**/*.scss _assets_src/scss/*.css _assets_src/scss/**/*.css _assets_src/css/*.css _assets_src/css/**/*.css !_assets_src/scss/_*.scss !_assets_src/scss/**/_*.scss !_assets_src/scss/_*.css !_assets_src/scss/**/_*.css !_assets_src/css/_*.css !_assets_src/css/**/_*.css --dir build/css --map --verbose",
+		"scripts": "rollup --config",
+		"lint": "npx eslint \"_assets_src/js/**/*.{js,jsx,ts,tsx}\"",
+		"lint:fix": "npx eslint \"_assets_src/js/**/*.{js,jsx,ts,tsx}\" --fix"
+	},
+	"author": "De'Yonté Wilkinson",
+	"license": "GPL-3.0",
+	"browserslist": {
+		"development": [
+			"last 1 Chrome version",
+			"last 1 Firefox version",
+			"last 1 Safari version"
+		],
+		"production": [
+			"last 5 versions",
+			"> 0.1%",
+			"not dead"
+		]
+	},
+	"devDependencies": {
+		"@csstools/postcss-sass": "^5.1.1",
+		"@rollup/plugin-commonjs": "^25.0.7",
+		"@rollup/plugin-node-resolve": "^15.2.3",
+		"@rollup/plugin-swc": "^0.3.0",
+		"@rollup/plugin-terser": "^0.4.4",
+		"@rollup/plugin-typescript": "^12.1.2",
+		"@typescript-eslint/eslint-plugin": "^8.24.1",
+		"@typescript-eslint/parser": "^8.24.1",
+		"autoprefixer": "^10.4.19",
+		"cssnano": "^7.0.1",
+		"eslint": "^9.20.1",
+		"eslint-plugin-import": "^2.31.0",
+		"fast-glob": "^3.3.2",
+		"postcss-cli": "^11.0.0",
+		"postcss-import": "^16.1.0",
+		"postcss-scss": "^4.0.9",
+		"rollup": "^4.17.2",
+		"rollup-plugin-wp-resolve": "^1.0.9",
+		"sass": "^1.75.0",
+		"typescript": "^5.7.3"
+	},
+	"dependencies": {
+		"include-media": "^2.0.0"
+	}
+}
