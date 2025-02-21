@@ -1,0 +1,84 @@
+name: Plugin Tracker Code Updates
+
+on:
+  push:
+    branches-ignore:
+      - feature/**
+      - fix/**
+    tags:
+      - "*"
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  unit_test:
+    name: Run Unit and Integration Tests
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        php_version: [8.1, 8.2, 8.3, 8.4] # PHP versions to test
+
+    steps:
+      - name: Checkout Code from GitHub Repository
+        uses: actions/checkout@v3
+
+      # Use each PHP version in the matrix to test against
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php_version }} # Use the PHP version from the matrix
+          coverage: none
+          tools: composer
+
+      # Remove composer.lock File to generate a new one during installation
+      - name: Remove composer.lock
+        run: rm -f composer.lock
+
+      - name: Install Composer Dependencies
+        run: composer install --prefer-dist --no-progress --no-suggest
+
+      # Run wp-pest Setup Command
+      - name: Set up wp-pest for PHPUnit and Pest Testing
+        run: vendor/bin/wp-pest setup plugin --plugin-slug=cshp-plugin-tracker --skip-delete
+
+      # Run Unit Tests with PestPHP
+      - name: Run Unit Tests
+        run: ./vendor/bin/pest --group=unit
+
+      # Run Integration Tests with PestPHP
+      - name: Run Integration Tests
+        run: ./vendor/bin/pest --group=integration
+
+  virus_scan:
+    name: Scan for Viruses
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code from GitHub Repository
+        uses: actions/checkout@v3
+
+      - name: Install ClamAV
+        run: sudo apt-get install -y clamav
+
+      # Since we are manually updating the database, we want to stop any freshclam processes that are running
+      # This fixes the error " Problem with internal logger (UpdateLogFile = /var/log/clamav/freshclam.log)"
+      - name: Stop any existing freshlam database updates running after installing clamAV
+        run: sudo killall freshclam
+
+      - name: Update ClamAV Virus Database
+        run: sudo freshclam
+
+      # Run scan on the files that are deployed
+      - name: Perform Virus Scan
+        run: |
+          clamscan --recursive --infected \
+            vendor \
+            non-composer-vendor \
+            _assets_src \
+            build \
+            src \
+            scaffold \
+            cshp-plugin-tracker.php

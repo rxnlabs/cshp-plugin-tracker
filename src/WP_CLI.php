@@ -5,8 +5,9 @@
 declare( strict_types=1 );
 namespace Cshp\Plugin\Tracker;
 
-if ( ! defined( 'ABSPATH' ) ) {
-	die( 'Direct access not allowed' );
+// exit if not loading in WordPress context but don't exit if running our PHPUnit tests
+if ( ! defined( 'ABSPATH' ) && ! defined( 'CSHP_PHPUNIT_TESTS_RUNNING' ) ) {
+	exit;
 } elseif ( ! defined( '\WP_CLI' ) || ! \WP_CLI ) {
 	return;
 }

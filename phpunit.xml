@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd" bootstrap="tests/bootstrap.php" colors="true" cacheDirectory=".phpunit.cache" beStrictAboutOutputDuringTests="true">
+  <testsuites>
+    <testsuite name="Unit Test Suite">
+      <directory>./tests/Unit/</directory>
+    </testsuite>
+    <testsuite name="Integration Test Suite">
+      <directory>./tests/Integration/</directory>
+    </testsuite>
+  </testsuites>
+  <php>
+    <!-- load a custom constant to indicate the PHPUnit testing is running so we can catch this in our code -->
+    <const name="CSHP_PHPUNIT_TESTS_RUNNING" value="true"/>
+    <env name="TEST" value="true" force="true"/>
+    <server name="DB_NAME" value="wp_pest_test_db"/>
+    <server name="DB_USER" value="root"/>
+    <server name="DB_PASSWORD" value=""/>
+    <server name="DB_HOST" value="localhost"/>
+  </php>
+  <coverage>
+    <report>
+      <clover outputFile="tests/coverage/clover.xml"/>
+      <html outputDirectory="tests/coverage/html" lowUpperBound="50" highLowerBound="90"/>
+    </report>
+  </coverage>
+  <source>
+    <include>
+      <file>cshp-plugin-tracker.php</file>
+      <directory suffix=".php">./src</directory>
+    </include>
+  </source>
+</phpunit>
