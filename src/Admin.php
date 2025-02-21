@@ -8,7 +8,8 @@
 declare( strict_types=1 );
 namespace Cshp\Plugin\Tracker;
 
-if ( ! defined( 'ABSPATH' ) ) {
+// exit if not loading in WordPress context but don't exit if running our PHPUnit tests
+if ( ! defined( 'ABSPATH' ) && ! defined( 'CSHP_PHPUNIT_TESTS_RUNNING' ) ) {
 	exit;
 }
 
@@ -93,7 +94,7 @@ class Admin {
 	 */
 	public function admin_hooks() {
 		add_action( 'admin_menu', array( $this, 'add_options_admin_menu' ) );
-		add_filter( 'admin_init', array( $this, 'add_settings_link' ) );
+		add_action( 'admin_init', array( $this, 'add_settings_link' ) );
 		add_action( 'admin_init', array( $this, 'register_options_admin_settings' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notice' ), 10 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue' ), 99 );
@@ -399,8 +400,8 @@ class Admin {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$tab = isset( $_GET['tab'] ) ? sanitize_text_field( $_GET['tab'] ) : $default_tab;
 		?>
-		<div class="wrap">
-			<h1><?php esc_html_e( get_admin_page_title() ); ?></h1>
+		<div class="wrap cshp-plugin-tracker-wrap">
+			<h1><?php esc_html_e( 'Cornershop Plugin Tracker' ); ?></h1>
 			<nav class="nav-tab-wrapper">
 				<a href="?page=cshp-plugin-tracker" class="nav-tab <?php echo ( null === $tab ? esc_attr( 'nav-tab-active' ) : '' ); ?>"><?php esc_html_e( 'Settings', $this->get_text_domain() ); ?></a>
 				<a href="?page=cshp-plugin-tracker&tab=log" class="nav-tab <?php echo ( 'log' === $tab ? esc_attr( 'nav-tab-active' ) : '' ); ?>"><?php esc_html_e( 'Log', $this->get_text_domain() ); ?></a>
@@ -736,10 +737,9 @@ class Admin {
 	 * @return void
 	 */
 	public function admin_notice() {
-		if ( ! empty( get_current_screen() ) &&
-			'settings_page_cshp-plugin-tracker' === get_current_screen()->id &&
-			$this->utilities->is_wordpress_org_external_request_blocked() &&
-			$this->is_authorized_user() ) {
+		$allowed_screen_ids = array( 'settings_page_cshp-plugin-tracker', 'options-generalphppagecshp-plugin-tracker' );
+
+		if ( ! empty( get_current_screen() ) && in_array( get_current_screen()->id, $allowed_screen_ids, true ) && $this->utilities->is_wordpress_org_external_request_blocked() && $this->is_authorized_user() ) {
 			printf( '<div class="notice notice-error is-dismissible cshp-pt-notice"><p>%s</p></div>', esc_html__( 'External requests to wordpress.org are being blocked. When generating the plugin tracker file, all themes and plugins will be considered premium. Unblock requests to wordpress.org to fix this. Update the PHP constant "WP_ACCESSIBLE_HOSTS" to include exception for *.wordpress.org', $this->get_text_domain() ) );
 		}
 	}
@@ -750,7 +750,7 @@ class Admin {
 	 * @return void
 	 */
 	public function admin_enqueue() {
-		$screen_ids = array( 'settings_page_cshp-plugin-tracker', 'plugin-install' );
+		$screen_ids = array( 'settings_page_cshp-plugin-tracker', 'plugin-install', 'options-generalphppagecshp-plugin-tracker' );
 		if ( ! empty( get_current_screen() ) && in_array( get_current_screen()->id, $screen_ids, true ) ) {
 			wp_enqueue_script( 'simple-datatables', $this->utilities->get_plugin_file_uri( '/build/vendor/simple-datatables/js/simple-datatables.min.js' ), array(), '7.1.2', true );
 			wp_enqueue_style( 'simple-datatables', $this->utilities->get_plugin_file_uri( '/build/vendor/simple-datatables/css/simple-datatables.min.css' ), array(), '7.1.2', true );

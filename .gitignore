@@ -57,6 +57,9 @@ vendor/phpunit
 vendor/yoast
 cshp-plugin-tracker.zip
 
+# PHPUnit
+.phpunit.cache/
+
 # Ignore Composer require-dev vendor folders but don't ignore the vendor folder since Composer
 # is not always available in the environment that we load the plugin
 vendor/automattic/vipwpcs
@@ -81,3 +84,4 @@ vendor/pestphp/pest-dev-tools
 vendor/pestphp/pest-plugin-type-coverage
 vendor/symfony/process
 vendor/wp-coding-standards/wpcs
+vendor/yoast/wp-test-utils

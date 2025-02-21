@@ -23,7 +23,8 @@
     "dingo-d/wp-pest-integration-test-setup": "2.0-alpha",
     "pestphp/pest": "^2.18.0",
     "wp-coding-standards/wpcs": "^3.0",
-    "automattic/vipwpcs": "dev-develop"
+    "automattic/vipwpcs": "dev-develop",
+    "yoast/wp-test-utils": "dev-JRF/update-for-polyfills-2.0"
   },
   "scripts": {
     "phpcs": "vendor/bin/phpcs",

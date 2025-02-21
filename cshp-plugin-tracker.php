@@ -16,8 +16,9 @@ Requires PHP: 7.3.0
 */
 namespace Cshp\Plugin\Tracker;
 
-if ( ! defined( 'ABSPATH' ) ) {
-	die( 'Direct access not allowed' );
+// exit if not loading in WordPress context but don't exit if running our PHPUnit tests
+if ( ! defined( 'ABSPATH' ) && ! defined( 'CSHP_PHPUNIT_TESTS_RUNNING' ) ) {
+	exit;
 }
 
 if ( ! function_exists( '\get_plugins' ) ||
@@ -146,59 +147,62 @@ trait Share {
 // load the libraries installed with composer
 require_once __DIR__ . '/vendor/autoload.php';
 
-// use a dependency injection container to load our dependencies instead of explicitly adding calling each classes constructor to load the dependencies
-$cshp_plugin_tracker_container = new \League\Container\Container();
-$cshp_plugin_tracker_container->delegate(
-	new \League\Container\ReflectionContainer()
-);
+// don't run this initialization code when running Unit testing
+if ( ! defined( 'CSHP_PHPUNIT_TESTS_RUNNING' ) ) {
+	// use a dependency injection container to load our dependencies instead of explicitly adding calling each classes constructor to load the dependencies
+	$cshp_plugin_tracker_container = new \League\Container\Container();
+	$cshp_plugin_tracker_container->delegate(
+		new \League\Container\ReflectionContainer()
+	);
 
-// Load the utilities class that handles methods that are used throughout the plugin
-// and all Cornershop plugins. These methods are not specific to this plugin only.
-$cshp_plugin_tracker_utilities = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Utilities::class );
+	// Load the utilities class that handles methods that are used throughout the plugin
+	// and all Cornershop plugins. These methods are not specific to this plugin only.
+	$cshp_plugin_tracker_utilities = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Utilities::class );
 
-// Main class responsible for the core functionality.
-// Call methods of the main class to load hooks.
-$cshp_plugin_tracker = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Plugin_Tracker::class );
-$cshp_plugin_tracker->load_non_composer_libraries();
-$cshp_plugin_tracker->register_activation_hook( __FILE__ );
-$cshp_plugin_tracker->register_uninstall_hook( __FILE__ );
-$cshp_plugin_tracker->hooks();
+	// Main class responsible for the core functionality.
+	// Call methods of the main class to load hooks.
+	$cshp_plugin_tracker = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Plugin_Tracker::class );
+	$cshp_plugin_tracker->load_non_composer_libraries();
+	$cshp_plugin_tracker->register_activation_hook( __FILE__ );
+	$cshp_plugin_tracker->register_uninstall_hook( __FILE__ );
+	$cshp_plugin_tracker->hooks();
 
-// Handle updating the plugin from a private repo since this plugin will not be hosted on wordpress.org
-$cshp_plugin_tracker_updater = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Updater::class );
-$cshp_plugin_tracker_updater->hooks();
+	// Handle updating the plugin from a private repo since this plugin will not be hosted on wordpress.org
+	$cshp_plugin_tracker_updater = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Updater::class );
+	$cshp_plugin_tracker_updater->hooks();
 
-// load WP-CLI commands only if we detect we are in a WP-CLI environment.
-if ( $cshp_plugin_tracker_utilities->is_wp_cli_environment() ) {
-	$cshp_plugin_tracker_wp_cli = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\WP_CLI::class );
-	$cshp_plugin_tracker_wp_cli->hooks();
-	$cshp_plugin_tracker_wp_cli->commands();
-}
+	// load WP-CLI commands only if we detect we are in a WP-CLI environment.
+	if ( $cshp_plugin_tracker_utilities->is_wp_cli_environment() ) {
+		$cshp_plugin_tracker_wp_cli = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\WP_CLI::class );
+		$cshp_plugin_tracker_wp_cli->hooks();
+		$cshp_plugin_tracker_wp_cli->commands();
+	}
 
-// Load admin class that creates settings in the backend.
-// Call methods of the admin class to load hooks.
-$cshp_plugin_tracker_admin = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Admin::class );
-$cshp_plugin_tracker_admin->set_plugin_tracker( $cshp_plugin_tracker );
-try {
-	$cshp_plugin_tracker_admin->admin_hooks();
-} catch ( \Exception $e ) {
-	$error_message = $e->getMessage();
-}
+	// Load admin class that creates settings in the backend.
+	// Call methods of the admin class to load hooks.
+	$cshp_plugin_tracker_admin = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Admin::class );
+	$cshp_plugin_tracker_admin->set_plugin_tracker( $cshp_plugin_tracker );
+	try {
+		$cshp_plugin_tracker_admin->admin_hooks();
+	} catch ( \Exception $e ) {
+		$error_message = $e->getMessage();
+	}
 
-// Load the class the handles logging interactions with this plugin, how many times plugins are downloaded, what themes are downloaded
-$cshp_plugin_tracker_logger = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Logger::class );
-$cshp_plugin_tracker_logger->hooks();
-$cshp_plugin_tracker_logger->set_admin_instance( $cshp_plugin_tracker_admin );
+	// Load the class the handles logging interactions with this plugin, how many times plugins are downloaded, what themes are downloaded
+	$cshp_plugin_tracker_logger = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Logger::class );
+	$cshp_plugin_tracker_logger->hooks();
+	$cshp_plugin_tracker_logger->set_admin_instance( $cshp_plugin_tracker_admin );
 
-// Load the class that stores the zip archives that are generated.
-$cshp_plugin_tracker_archive = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Archive::class );
-$cshp_plugin_tracker_archive->hooks();
+	// Load the class that stores the zip archives that are generated.
+	$cshp_plugin_tracker_archive = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Archive::class );
+	$cshp_plugin_tracker_archive->hooks();
 
-// Load the class handles backing up the premium plugins to the plugin recovery site.
-$cshp_plugin_tracker_backup = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Backup::class );
-$cshp_plugin_tracker_backup->set_plugin_tracker( $cshp_plugin_tracker );
-try {
-	$cshp_plugin_tracker_backup->hooks();
-} catch ( \Exception $e ) {
-	$error_message = $e->getMessage();
+	// Load the class handles backing up the premium plugins to the plugin recovery site.
+	$cshp_plugin_tracker_backup = $cshp_plugin_tracker_container->get( \Cshp\Plugin\Tracker\Backup::class );
+	$cshp_plugin_tracker_backup->set_plugin_tracker( $cshp_plugin_tracker );
+	try {
+		$cshp_plugin_tracker_backup->hooks();
+	} catch ( \Exception $e ) {
+		$error_message = $e->getMessage();
+	}
 }
