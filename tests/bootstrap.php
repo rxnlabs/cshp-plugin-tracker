@@ -51,4 +51,13 @@ if (isset($GLOBALS['argv']) && in_array('--group=integration', $GLOBALS['argv'],
 	tests_add_filter('muplugins_loaded', '_manually_load_plugin');
 
 	require_once dirname(__FILE__, 2) . '/wp/tests/phpunit/includes/bootstrap.php';
+} else {
+	// only run this code when unit testing alone
+	// load the ABSPATH constant when Unit testing since the plugin has references to ABSPATH
+	if ( ! defined( 'ABSPATH' ) ) {
+		define( 'ABSPATH', dirname( __DIR__ ) . '/wp/src/' );
+	}
+
+	// require the main plugin file in Unit tests so we can load our shared Trait
+	require_once dirname(dirname(__FILE__)) . '/cshp-plugin-tracker.php';
 }
