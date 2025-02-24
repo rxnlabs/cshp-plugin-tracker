@@ -58,6 +58,12 @@ if (isset($GLOBALS['argv']) && in_array('--group=integration', $GLOBALS['argv'],
 		define( 'ABSPATH', dirname( __DIR__ ) . '/wp/src/' );
 	}
 
+	// load the WP_CONTENT_DIR constant when Unit testing since the file.php file used to load the WP_Filesystem class needs this constant
+	if ( ! defined( 'WP_CONTENT_DIR' ) ) {
+		define( 'WP_CONTENT_DIR', ABSPATH . 'wp-content' );
+		define( 'WP_LANG_DIR', WP_CONTENT_DIR );
+	}
+
 	// require the main plugin file in Unit tests so we can load our shared Trait
 	require_once dirname(dirname(__FILE__)) . '/cshp-plugin-tracker.php';
 }

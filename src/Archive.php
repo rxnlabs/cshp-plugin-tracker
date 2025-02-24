@@ -77,6 +77,8 @@ class Archive {
 
 	/**
 	 * Register a post type for tracking the generated zip files.
+	 *
+	 * @return void
 	 */
 	public function create_archive_post_type() {
 		register_post_type(
@@ -301,7 +303,7 @@ class Archive {
 			);
 
 			if ( ! is_wp_error( $archive_zip_post ) && $archive_zip_post->have_posts() ) {
-				$archive_zip_post = $archive_zip_post[0];
+				$archive_zip_post = $archive_zip_post->posts[0];
 			}
 		} elseif ( ! empty( $archive_zip_file_name_or_archive_zip_post ) && is_string( $archive_zip_file_name_or_archive_zip_post ) ) {
 			$archive_zip_post = $this->get_archive_post_by_zip_filename( $archive_zip_file_name_or_archive_zip_post );
@@ -329,7 +331,7 @@ class Archive {
 		if ( ! empty( $plugins ) && is_array( $plugins ) ) {
 			foreach ( $plugins as $plugin => $version ) {
 				$plugin_data = get_plugins( '/' . $plugin );
-				// if any saved plugin version is not the same as the curret plugin version, the archive is old.
+				// if any saved plugin version is not the same as the current plugin version, the archive is old.
 
 				if ( ! empty( $plugin_data ) ) {
 					// traverse the plugin data since the key that is returned is the plugin file name

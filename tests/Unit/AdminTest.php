@@ -52,24 +52,6 @@ beforeEach(
 				'apply_filters' => function ( $filter, $default_value ) {
 					return $default_value;
 				},
-				'get_rest_url'  => function ( $blog_id = null, $path = '/', $scheme = '' ) {
-					return 'http://example.com/wp-json/cshp/v1/' . $path;
-				},
-				'add_query_arg' => function ( ...$args ) {
-					$query_args = is_array( $args[0] ) ? $args[0] : array( $args[0] => $args[1] );
-					$url = $args[ count( $args ) - 1 ];
-					$query_string = http_build_query( $query_args );
-					return $url . '?' . $query_string;
-				},
-				'home_url'      => function ( $path = '', $scheme = 'http' ) {
-					$base = 'https://example.com';
-
-					if ( '' !== $path && 0 !== strpos( $path, '/' ) ) {
-						$path = '/' . $path;
-					}
-
-					return $base . $path;
-				},
 			)
 		);
 	}

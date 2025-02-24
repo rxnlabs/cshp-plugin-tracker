@@ -6,6 +6,14 @@
       "Cshp\\Plugin\\Tracker\\": "src"
     }
   },
+  "autoload-dev": {
+    "classmap": [
+      "tests/Mocks/"
+    ],
+    "files": [
+      "tests/Stubs/functions.php"
+    ]
+  },
   "minimum-stability": "dev",
   "config": {
     "allow-plugins": {
