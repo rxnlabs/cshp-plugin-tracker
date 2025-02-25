@@ -4,7 +4,10 @@
   "autoload": {
     "psr-4": {
       "Cshp\\Plugin\\Tracker\\": "src"
-    }
+    },
+    "files": [
+      "src/License.php"
+    ]
   },
   "autoload-dev": {
     "classmap": [

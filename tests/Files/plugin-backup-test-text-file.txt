@@ -1,0 +1,1 @@
+test file that is used to test whether the zip file is deleted when the archive post file is deleted

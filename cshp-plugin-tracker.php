@@ -142,6 +142,30 @@ trait Share {
 
 		return false;
 	}
+
+	/**
+	 * Get the name of a plugin's folder name using the key that get_plugins() returns.
+	 *
+	 * The get_plugins() function returns the plugin information key by the plugin folder name + the plugin's main file.
+	 * We need to get the name of the plugin's folder or just the main file if the plugin sits at the root of the
+	 * plugins folder as a single file.
+	 *
+	 * @param string $plugin_folder_file_name The plugin's folder name and main plugin file.
+	 *
+	 * @return string Name of the plugin's folder without the main plugin file or the name of just the main plugin file.
+	 */
+	public function extract_plugin_folder_name_by_plugin_file_name( $plugin_folder_file_name ) {
+		$plugin_folder_name = dirname( $plugin_folder_file_name );
+
+		// if we could not extract the plugin directory name from the key,
+		// assume that the plugin is a single file installed at the plugins folder root
+		// (e.g. hello.php for the hello dolly plugin)
+		if ( empty( $plugin_folder_name ) || '.' === $plugin_folder_name ) {
+			$plugin_folder_name = $plugin_folder_file_name;
+		}
+
+		return $plugin_folder_name;
+	}
 }
 
 // load the libraries installed with composer

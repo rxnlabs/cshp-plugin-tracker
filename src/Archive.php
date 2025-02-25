@@ -419,8 +419,8 @@ class Archive {
 		$plugins            = get_plugins();
 		$plugin_folder_data = array();
 		foreach ( $plugins as $plugin_folder_file => $plugin_data ) {
-			$plugin_folder                        = dirname( $plugin_folder_file );
-			$plugin_folder_data[ $plugin_folder ] = $plugin_data;
+			$plugin_folder_name                        = $this->extract_plugin_folder_name_by_plugin_file_name( $plugin_folder_file );
+			$plugin_folder_data[ $plugin_folder_name ] = $plugin_data;
 		}
 
 		$archive_posts = new \WP_Query(
@@ -438,25 +438,36 @@ class Archive {
 		if ( $archive_posts->have_posts() ) {
 			foreach ( $archive_posts->posts as $post_id ) {
 				$saved_plugin_data = get_post_meta( $post_id, 'cshp_plugin_tracker_archived_plugins', true );
+				$should_delete     = false;
 
 				try {
-					$saved_plugin_data = json_decode( $saved_plugin_data, true );
-					foreach ( $saved_plugin_data as $plugin_folder_name => $version ) {
-						$should_delete = false;
-						// if an archive has a plugin that is no longer installed, delete it.
-						if ( ! isset( $plugin_folder_data[ $plugin_folder_name ] ) ) {
-							$should_delete = true;
-						}
+					// throw an exception if we cannot decode the JSON data and
+					// set a maximum depth of 2 since we know our plugins are only stored as folder name + version
+					$saved_plugin_data = json_decode( $saved_plugin_data, true, 2, JSON_THROW_ON_ERROR );
 
-						// if the plugin version that is archived is not the same version that is currently installed, delete it.
-						if ( $version !== $plugin_folder_data[ $plugin_folder_name ]['Version'] ) {
-							$should_delete = true;
-						}
+					if ( empty( $saved_plugin_data ) ) {
+						$should_delete = true;
+					} else {
+						foreach ( $saved_plugin_data as $plugin_folder_name => $version ) {
+							// if an archive has a plugin that is no longer installed, delete it.
+							if ( ! isset( $plugin_folder_data[ $plugin_folder_name ] ) ) {
+								$should_delete = true;
+								break;
+							}
 
-						$should_delete && wp_delete_post( $post_id, true );
+							// if the plugin version that is archived is not the same version that is currently installed, delete it.
+							if ( $version !== $plugin_folder_data[ $plugin_folder_name ]['Version'] ) {
+								$should_delete = true;
+								break;
+							}
+						}
 					}
 				} catch ( \Exception $e ) { //phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+					// if we cannot determine what plugins are in this zip based off of a funky or unsaved
+					$should_delete = true;
 				}
+
+				$should_delete && wp_delete_post( $post_id, true );
 			}//end foreach
 		}//end if
 	}
