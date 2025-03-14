@@ -49,6 +49,7 @@ test(
 	'it creates a new post type with the post type slug cshp_pt_zip and a new taxonomy named cshp_pt_zip_content [Function: create_archive_post_type()]',
 	function () {
 		$this->mockAdmin->shouldReceive( 'is_debug_mode_enabled' )->zeroOrMoreTimes()->andReturn( false );
+		$this->mockUtilities->shouldReceive( 'str_ends_with' )->zeroOrMoreTimes()->andReturn( true );
 		$this->archive->hooks();
 		$this->archive->create_archive_post_type();
 		$post_type = get_post_type_object( $this->archive->get_archive_post_type() );
@@ -58,7 +59,7 @@ test(
 );
 
 test(
-	'it should have a callback registered for the hook wp_insert_post that will limit the number of archive posts that can exists and adding 26 posts should shpuld that the post count is less than 26 [Hook: wp_insert_post, Callback: limit_archive_post_type()]',
+	'it should have a callback registered for the hook wp_insert_post that will limit the number of archive posts that can exists and adding 26 posts should show that the post count is less than 26 [Hook: wp_insert_post, Callback: limit_archive_post_type()]',
 	function () {
 		$this->archive->hooks();
 		$hook_priority = has_action( 'wp_insert_post', array( $this->archive, 'limit_archive_post_type' ) );
