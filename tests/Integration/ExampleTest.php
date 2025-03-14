@@ -2,27 +2,38 @@
 
 namespace Tests\Integration;
 
-beforeEach(function () {
-	parent::setUp();
+if ( isUnitTest() ) {
+	return;
+}
 
-	// Set up a REST server instance.
-	global $wp_rest_server;
+beforeEach(
+	function () {
+		parent::setUp();
 
-	$this->server = $wp_rest_server = new \WP_REST_Server();
-	do_action('rest_api_init', $this->server);
-});
+		// Set up a REST server instance.
+		global $wp_rest_server;
+		$wp_rest_server = new \WP_REST_Server();
+		$this->server   = $wp_rest_server;
+		do_action( 'rest_api_init', $this->server );
+	}
+);
 
-afterEach(function () {
-	global $wp_rest_server;
-	$wp_rest_server = null;
+afterEach(
+	function () {
+		global $wp_rest_server;
+		$wp_rest_server = null;
 
-	parent::tearDown();
-});
+		parent::tearDown();
+	}
+);
 
-test('Rest API endpoints work', function () {
-	$routes = $this->server->get_routes();
+test(
+	'Rest API endpoints work',
+	function () {
+		$routes = $this->server->get_routes();
 
-	expect($routes)
+		expect( $routes )
 		->toBeArray()
-		->toHaveKey('/wp/v2/posts');
-});
+		->toHaveKey( '/wp/v2/posts' );
+	}
+);

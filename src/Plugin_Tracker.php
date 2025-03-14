@@ -699,8 +699,17 @@ class Plugin_Tracker {
 
 		if ( $this->utilities->does_file_exists( $plugin_path_file ) && is_file( $plugin_path_file ) ) {
 			$plugin_data        = get_plugin_data( $plugin_path_file, false, false );
-			$plugin_folder_name = basename( dirname( $plugin_path_file ) );
 			$version_check      = isset( $data['Version'] ) ? $data['Version'] : '';
+			$plugin_folder_name = dirname( $plugin_path_file );
+
+			// if we could not extract the plugin directory name from the key,
+			// assume that the plugin is a single file installed at the plugins folder root
+			// (e.g. hello.php for the hello dolly plugin)
+			if ( empty( $plugin_folder_name ) || '.' === $plugin_folder_name ) {
+				$plugin_folder_name = $plugin_path_file;
+			} else {
+				$plugin_folder_name = basename( $plugin_folder_name );
+			}
 
 			// check the composer.json file and check if the file has been modified within the past week. If a plugin was marked as being public within the past week, then it is more than likely still available on wordpress.org
 			// this prevents us from pinging wasting resources pinging the wordpress.org API and acts like a cache

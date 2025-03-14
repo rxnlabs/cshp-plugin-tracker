@@ -51,4 +51,19 @@ if (isset($GLOBALS['argv']) && in_array('--group=integration', $GLOBALS['argv'],
 	tests_add_filter('muplugins_loaded', '_manually_load_plugin');
 
 	require_once dirname(__FILE__, 2) . '/wp/tests/phpunit/includes/bootstrap.php';
+} else {
+	// only run this code when unit testing alone
+	// load the ABSPATH constant when Unit testing since the plugin has references to ABSPATH
+	if ( ! defined( 'ABSPATH' ) ) {
+		define( 'ABSPATH', dirname( __DIR__ ) . '/wp/src/' );
+	}
+
+	// load the WP_CONTENT_DIR constant when Unit testing since the file.php file used to load the WP_Filesystem class needs this constant
+	if ( ! defined( 'WP_CONTENT_DIR' ) ) {
+		define( 'WP_CONTENT_DIR', ABSPATH . 'wp-content' );
+		define( 'WP_LANG_DIR', WP_CONTENT_DIR );
+	}
+
+	// require the main plugin file in Unit tests so we can load our shared Trait
+	require_once dirname(dirname(__FILE__)) . '/cshp-plugin-tracker.php';
 }
