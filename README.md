@@ -96,7 +96,7 @@ By tracking the installed versions of a WP core, third-party plugins, and third-
 - **Enhanced Version Recovery** – Access previous versions of premium plugins via the Cornershop Plugin Recovery site whenever you need to roll back.
 
 ## Important Note for Testing
-If you decide to download and test this plugin, you will need to have a local or remote WordPress website set up using an administrator email address from either **@wideeyecreative.com** or **@wideeye.co**. This requirement ensures access to the plugin’s settings and additional functionality.
+If you decide to download and test this plugin, you will need to have a local or remote WordPress website set up using an administrator email address from a list of email domains listed in the method `is_authorized_user` in the main plugin file `cshp-plugin-tracker.php`. This requirement ensures access to the plugin’s settings and additional functionality.
 
 ## More Details
 ### Key Features
