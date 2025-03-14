@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0] - 2025-03-14
+
+### Added
+
+- Introduced unit and integration tests for the `Admin` and `Archive` classes to ensure better plugin maintainability, reliability, and robustness.
+- Implemented tests using the `wp-pest` library for improved developer experience and comprehensive test coverage.
+
 ## [1.2.0] - 2025-02-18
 
 ### Added
