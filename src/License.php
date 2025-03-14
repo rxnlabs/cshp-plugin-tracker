@@ -5,11 +5,6 @@
 declare( strict_types=1 );
 namespace Cshp\Plugin\Tracker;
 
-// exit if not loading in WordPress context but don't exit if running our PHPUnit tests
-if ( ! defined( 'ABSPATH' ) && ! defined( 'CSHP_PHPUNIT_TESTS_RUNNING' ) ) {
-	exit;
-}
-
 // License Gravity Forms (key valid as of 11/2018)
 // https://docs.gravityforms.com/wp-config-options/#gf-license-key
 if ( ! defined( 'GF_LICENSE_KEY' ) ) {

@@ -4,7 +4,18 @@
   "autoload": {
     "psr-4": {
       "Cshp\\Plugin\\Tracker\\": "src"
-    }
+    },
+    "files": [
+      "src/License.php"
+    ]
+  },
+  "autoload-dev": {
+    "classmap": [
+      "tests/Mocks/"
+    ],
+    "files": [
+      "tests/Stubs/functions.php"
+    ]
   },
   "minimum-stability": "dev",
   "config": {
@@ -20,11 +31,11 @@
     "league/container": "5.x-dev"
   },
   "require-dev": {
-    "dingo-d/wp-pest-integration-test-setup": "2.0-alpha",
     "pestphp/pest": "^2.18.0",
     "wp-coding-standards/wpcs": "^3.0",
     "automattic/vipwpcs": "dev-develop",
-    "yoast/wp-test-utils": "dev-JRF/update-for-polyfills-2.0"
+    "yoast/wp-test-utils": "dev-JRF/update-for-polyfills-2.0",
+    "dingo-d/wp-pest": "2.0.0-alpha"
   },
   "scripts": {
     "phpcs": "vendor/bin/phpcs",
