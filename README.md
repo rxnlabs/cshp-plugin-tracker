@@ -2,26 +2,12 @@
 
 A WordPress plugin that tracks installed WordPress core, themes, and plugins; backs up premium plugins, and streamlines plugin management.
 
-## My Contributions
-I designed, built, and maintained this plugin from its inception. While I welcomed collaboration, I served as the primary developer and sole maintainer because the rest of the team was focused on client-facing projects. My role allowed me to concentrate on improving our internal processes and workflows through this plugin’s development.
-
 ## Core Technologies
 - **WordPress** – Plugin development and core integration.
 - **PHP** – Primary language for plugin logic and REST API handling.
 - **JavaScript/TypeScript** – Supporting scripts interactions on the admin settings page.
 - **Third-Party APIs** – Integration with WordPress.org and the Cornershop Plugin Recovery service.
 - **CI/CD Pipelines** - Continuous Integration with Github Action file [build.yml](.github/workflows/build.yml) that verifies unit and integration tests have passed. Continuous Deployment with Bitbucket pipelines integration [bitbucket-pipelines.yml](bitbucket-pipelines.yml) that handled the deployment of the final plugin zip file.
-
-## Main files to evaluate
-- [cshp-plugin-tracker.php](cshp-plugin-tracker.php)
-- [src/Plugin_Tracker.php](src/Plugin_Tracker.php)
-- [src/Backup.php](src/Backup.php)
-- [src/Archive.php](src/Archive.php)
-- [src/WP_CLI.php](src/WP_CLI.php)
-- [_assets_src/js/admin.ts](_assets_src/js/admin.ts)
-- [src/Admin.php](src/Admin.php)
-- [src/Logger.php](src/Logger.php)
-- [src/Utilities.php](src/Utilities.php)
 
 ## Inspiration
 This project was inspired by [WP-Composer](https://github.com/rxnlabs/wp-composer), an open-source WP-CLI tool I created and presented at [WordCamp Baltimore 2016](https://wordpress.tv/2016/11/21/deyonte-wilkinson-managing-wordpress-dependencies-in-single-and-multisite-environments/). The biggest challenge in that earlier solution was handling premium plugins not hosted on WordPress.org—Cornershop Plugin Tracker aims to solve that gap.
@@ -176,16 +162,6 @@ Below are some images illustrating how Cornershop Plugin Tracker integrates with
 3. **WP-CLI Integration**  
    ![WP-CLI plugin search screenshot](docs/assets/cpr-wp-cli-result.png)  
    *(Use `wp plugin install cpr:some-plugin` to recover premium plugins.)*
-
-## Frequently Asked Questions
-### Why not just not track plugins and rely on WordPress Packagist and Composer?
-Great question.
-
-- Not all web host support installing plugins using Composer or have Composer installed. Not all web host even have WP CLI installed.
-- We worked with organizations of various sizes and budgets. Not every client can afford a good host that enforce good workflow habits like Pantheon.
-- We don’t always deploy code in a way that is suitable to a good workflow. We want to have best practices for both support clients and retainers but we have not found a good middle ground that does not increase maintenance costs for our clients.
-- WordPress Packagist is not a project officially supported by the core WordPress team.
-- WordPress Packagist does not work with premium plugins not hosted on wordpress.org
 
 ## Contributing & Support
 
